@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Clarity - Financial Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist:wght@400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0b1326;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .glass-card {
+            background: rgba(23, 31, 51, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .glass-card-active {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .inner-glow {
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
+        }
+
+        .sunken-glass {
+            background: rgba(6, 14, 32, 0.4);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        /* Animated gradient background */
+        .bg-mesh {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            background: radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.1) 0%, transparent 40%),
+                        radial-gradient(circle at 90% 80%, rgba(249, 189, 34, 0.05) 0%, transparent 40%),
+                        radial-gradient(circle at 50% 50%, #0b1326 0%, #060e20 100%);
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 3s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface": "#dae2fd",
+                        "error": "#ffb4ab",
+                        "surface-container-highest": "#2d3449",
+                        "primary": "#4edea3",
+                        "primary-container": "#10b981",
+                        "on-tertiary": "#402d00",
+                        "tertiary-fixed": "#ffdf9f",
+                        "error-container": "#93000a",
+                        "surface-dim": "#0b1326",
+                        "on-secondary-fixed-variant": "#881d24",
+                        "surface-container": "#171f33",
+                        "on-tertiary-fixed-variant": "#5c4300",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-tertiary-container": "#4a3500",
+                        "on-primary-fixed": "#002113",
+                        "on-background": "#dae2fd",
+                        "on-tertiary-fixed": "#261a00",
+                        "surface-variant": "#2d3449",
+                        "on-secondary-fixed": "#410006",
+                        "on-secondary-container": "#ff9996",
+                        "tertiary-container": "#ce9a00",
+                        "on-surface-variant": "#bbcabf",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-high": "#222a3d",
+                        "surface-container-low": "#131b2e",
+                        "on-error": "#690005",
+                        "outline-variant": "#3c4a42",
+                        "surface-tint": "#4edea3",
+                        "tertiary-fixed-dim": "#f9bd22",
+                        "inverse-surface": "#dae2fd",
+                        "background": "#0b1326",
+                        "inverse-primary": "#006c49",
+                        "surface-bright": "#31394d",
+                        "inverse-on-surface": "#283044",
+                        "on-primary": "#003824",
+                        "surface": "#0b1326",
+                        "secondary": "#ffb3b0",
+                        "secondary-container": "#881d24",
+                        "on-primary-container": "#00422b",
+                        "secondary-fixed-dim": "#ffb3b0",
+                        "surface-container-lowest": "#060e20",
+                        "on-secondary": "#670211",
+                        "secondary-fixed": "#ffdad8",
+                        "primary-fixed-dim": "#4edea3",
+                        "outline": "#86948a",
+                        "tertiary": "#f9bd22",
+                        "primary-fixed": "#6ffbbe"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-padding": "20px",
+                        "glass-margin": "8px",
+                        "element-gap": "12px",
+                        "stack-gap": "16px",
+                        "unit": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "label-mono": ["Geist"],
+                        "display-currency": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "label-mono": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "display-currency": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface">
+<div class="bg-mesh"></div>
+<!-- Top App Bar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding py-stack-gap backdrop-blur-xl border-b border-on-surface/10 bg-surface/10 shadow-sm">
+<div class="flex items-center gap-element-gap">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-primary/20">
+<img class="w-full h-full object-cover" data-alt="A professional close-up studio portrait of a young creative professional named Alex, with soft cinematic lighting and a minimalist tech-focused background. The image has a cool color temperature with emerald green accents, matching a modern glassmorphic UI aesthetic. The mood is confident, calm, and visionary, reflecting financial clarity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhhUVN-2vSIPnw6oV3flF9z-sTxZ1EK06mYSfhsQCh-74FoU1ueIhHjL1D4jSSnC8qYIxhS2O3M1n1dkh067adXF0E-vosFZRhXWGWiGTwtu2F_ljK6MzIBUEcPrqIyZfo41JKivVVX6ORdOeBd_NTo1FE14qEMPpK4-Dx8pdIKUokO_3JIjfoVKu5XJ0q6nDnpbX4BkXg42Z7tX51slnbj5oSsqiRwTcUhMYnoic7etm7Jc70bK-wPq2WkcmjwVpM248yYickF9o"/>
+</div>
+<div>
+<p class="font-label-mono text-label-mono text-on-surface-variant">Hello, Alex</p>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">Clarity</h1>
+</div>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full glass-card active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary">notifications</span>
+</button>
+</header>
+<main class="pt-28 pb-32 px-container-padding max-w-md mx-auto space-y-stack-gap">
+<!-- Balance Card -->
+<section class="glass-card-active rounded-3xl p-stack-gap relative overflow-hidden">
+<div class="absolute -top-10 -right-10 w-32 h-32 bg-primary/10 rounded-full blur-3xl"></div>
+<p class="font-label-mono text-label-mono text-on-surface-variant">Total Balance</p>
+<div class="flex items-baseline gap-2 mt-unit">
+<span class="font-display-currency text-display-currency text-primary">$12,450.00</span>
+</div>
+<div class="grid grid-cols-2 gap-element-gap mt-stack-gap">
+<div class="sunken-glass rounded-xl p-3">
+<div class="flex items-center gap-1 mb-1">
+<span class="material-symbols-outlined text-primary text-sm">arrow_downward</span>
+<span class="font-label-mono text-[10px] text-on-surface-variant">Income</span>
+</div>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">$5,200</p>
+</div>
+<div class="sunken-glass rounded-xl p-3">
+<div class="flex items-center gap-1 mb-1">
+<span class="material-symbols-outlined text-secondary text-sm">arrow_upward</span>
+<span class="font-label-mono text-[10px] text-on-surface-variant">Expense</span>
+</div>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">$2,100</p>
+</div>
+</div>
+</section>
+<!-- Bento Row: Spending Chart & Stats -->
+<div class="grid grid-cols-12 gap-element-gap">
+<!-- Spending Chart -->
+<section class="col-span-7 glass-card rounded-2xl p-element-gap flex flex-col justify-between aspect-square">
+<p class="font-label-mono text-label-mono text-on-surface-variant">Spending</p>
+<div class="relative flex items-center justify-center py-2">
+<!-- Simple CSS Donut Chart -->
+<div class="w-24 h-24 rounded-full border-[10px] border-surface-container-highest flex items-center justify-center" style="background: conic-gradient(#4edea3 0% 45%, #f9bd22 45% 75%, #ffb3b0 75% 100%); border-color: rgba(23, 31, 51, 0.4);">
+<div class="w-16 h-16 rounded-full bg-surface-dim backdrop-blur-md flex items-center justify-center">
+<span class="text-[10px] font-bold text-on-surface">Categories</span>
+</div>
+</div>
+</div>
+<div class="flex justify-between items-center text-[10px] font-label-mono text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-primary"></span>Food</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-tertiary"></span>Bills</span>
+</div>
+</section>
+<!-- Quick Info -->
+<div class="col-span-5 space-y-element-gap">
+<div class="glass-card rounded-2xl p-element-gap flex-1 h-[calc(50%-6px)] flex flex-col justify-center">
+<p class="font-label-mono text-[10px] text-on-surface-variant">Daily Avg</p>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">$72</p>
+</div>
+<div class="glass-card rounded-2xl p-element-gap flex-1 h-[calc(50%-6px)] flex flex-col justify-center border-l-2 border-primary">
+<p class="font-label-mono text-[10px] text-on-surface-variant">Savings Rate</p>
+<p class="font-headline-lg-mobile text-headline-lg-mobile text-primary">+12%</p>
+</div>
+</div>
+</div>
+<!-- Active Budgets -->
+<section class="space-y-element-gap">
+<div class="flex justify-between items-center px-1">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Active Budgets</h2>
+<button class="text-primary font-label-mono text-label-mono">View All</button>
+</div>
+<div class="space-y-element-gap">
+<!-- Food & Groceries -->
+<div class="glass-card rounded-2xl p-4 space-y-3">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-tertiary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary">restaurant</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface">Food &amp; Groceries</span>
+</div>
+<span class="font-label-mono text-label-mono text-tertiary">$800 / $1,000</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary rounded-full" style="width: 80%"></div>
+</div>
+<p class="text-[10px] font-label-mono text-tertiary flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">warning</span> 80% used. Careful this week.
+                    </p>
+</div>
+<!-- Transport -->
+<div class="glass-card rounded-2xl p-4 space-y-3">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">directions_car</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface">Transport</span>
+</div>
+<span class="font-label-mono text-label-mono text-on-surface-variant">$150 / $500</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 30%"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Transactions -->
+<section class="space-y-element-gap pb-10">
+<div class="flex justify-between items-center px-1">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Recent Activity</h2>
+<button class="text-on-surface-variant font-label-mono text-label-mono">History</button>
+</div>
+<div class="glass-card rounded-3xl p-2 space-y-1">
+<!-- Transaction 1 -->
+<div class="flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full sunken-glass flex items-center justify-center group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-on-surface-variant">coffee</span>
+</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Starbucks</p>
+<p class="text-[10px] font-label-mono text-on-surface-variant">Today, 08:45 AM</p>
+</div>
+</div>
+<p class="font-label-mono text-body-md text-secondary">-$5.50</p>
+</div>
+<!-- Transaction 2 -->
+<div class="flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full sunken-glass flex items-center justify-center group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-primary">payments</span>
+</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Monthly Salary</p>
+<p class="text-[10px] font-label-mono text-on-surface-variant">Yesterday, 04:00 PM</p>
+</div>
+</div>
+<p class="font-label-mono text-body-md text-primary">+$3,000.00</p>
+</div>
+<!-- Transaction 3 -->
+<div class="flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full sunken-glass flex items-center justify-center group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-on-surface-variant">home</span>
+</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Rent Payment</p>
+<p class="text-[10px] font-label-mono text-on-surface-variant">Sep 01, 10:00 AM</p>
+</div>
+</div>
+<p class="font-label-mono text-body-md text-secondary">-$1,200.00</p>
+</div>
+</div>
+</section>
+</main>
+<!-- FAB -->
+<button class="fixed right-6 bottom-24 z-[60] w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center inner-glow active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'wght' 600;">add</span>
+</button>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-glass-margin pb-6 pt-2 backdrop-blur-xl border-t border-on-surface/10 bg-surface-container/20 shadow-lg rounded-t-xl">
+<div class="flex flex-col items-center justify-center text-primary bg-primary-container/20 rounded-full px-4 py-1 active:scale-90 transition-transform">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-mono text-label-mono">Dashboard</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-label-mono text-label-mono">Activity</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform">
+<span class="material-symbols-outlined">pie_chart</span>
+<span class="font-label-mono text-label-mono">Budgets</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-mono text-label-mono">Reports</span>
+</div>
+</nav>
+<script>
+        // Micro-interaction: Header scroll effect
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 20) {
+                header.classList.add('bg-surface/80');
+                header.classList.remove('bg-surface/10');
+            } else {
+                header.classList.add('bg-surface/10');
+                header.classList.remove('bg-surface/80');
+            }
+        });
+
+        // Add transaction ripple animation logic
+        const fab = document.querySelector('button.bg-primary');
+        fab.addEventListener('click', () => {
+            // Placeholder for action
+            console.log('Opening Add Transaction Flow');
+        });
+    </script>
+</body></html>

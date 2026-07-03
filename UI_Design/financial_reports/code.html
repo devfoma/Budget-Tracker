@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Clarity | Reports &amp; Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist:wght@400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface": "#dae2fd",
+                        "error": "#ffb4ab",
+                        "surface-container-highest": "#2d3449",
+                        "primary": "#4edea3",
+                        "primary-container": "#10b981",
+                        "on-tertiary": "#402d00",
+                        "tertiary-fixed": "#ffdf9f",
+                        "error-container": "#93000a",
+                        "surface-dim": "#0b1326",
+                        "on-secondary-fixed-variant": "#881d24",
+                        "surface-container": "#171f33",
+                        "on-tertiary-fixed-variant": "#5c4300",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-tertiary-container": "#4a3500",
+                        "on-primary-fixed": "#002113",
+                        "on-background": "#dae2fd",
+                        "on-tertiary-fixed": "#261a00",
+                        "surface-variant": "#2d3449",
+                        "on-secondary-fixed": "#410006",
+                        "on-secondary-container": "#ff9996",
+                        "tertiary-container": "#ce9a00",
+                        "on-surface-variant": "#bbcabf",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-high": "#222a3d",
+                        "surface-container-low": "#131b2e",
+                        "on-error": "#690005",
+                        "outline-variant": "#3c4a42",
+                        "surface-tint": "#4edea3",
+                        "tertiary-fixed-dim": "#f9bd22",
+                        "inverse-surface": "#dae2fd",
+                        "background": "#0b1326",
+                        "inverse-primary": "#006c49",
+                        "surface-bright": "#31394d",
+                        "inverse-on-surface": "#283044",
+                        "on-primary": "#003824",
+                        "surface": "#0b1326",
+                        "secondary": "#ffb3b0",
+                        "secondary-container": "#881d24",
+                        "on-primary-container": "#00422b",
+                        "secondary-fixed-dim": "#ffb3b0",
+                        "surface-container-lowest": "#060e20",
+                        "on-secondary": "#670211",
+                        "secondary-fixed": "#ffdad8",
+                        "primary-fixed-dim": "#4edea3",
+                        "outline": "#86948a",
+                        "tertiary": "#f9bd22",
+                        "primary-fixed": "#6ffbbe"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-padding": "20px",
+                        "glass-margin": "8px",
+                        "element-gap": "12px",
+                        "stack-gap": "16px",
+                        "unit": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "label-mono": ["Geist"],
+                        "display-currency": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "label-mono": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "display-currency": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(23, 31, 51, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+        .active-glass {
+            background: rgba(78, 222, 163, 0.15);
+            border: 1px solid rgba(78, 222, 163, 0.3);
+            backdrop-filter: blur(40px);
+        }
+        .inner-glow {
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        }
+        .chart-path {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: draw 2s ease-out forwards;
+        }
+        @keyframes draw {
+            to { stroke-dashoffset: 0; }
+        }
+        body {
+            background: radial-gradient(circle at top right, #171f33, #0b1326);
+            min-height: 100vh;
+            color: #dae2fd;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="font-body-md text-body-md pb-32">
+<!-- Top App Bar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding py-stack-gap backdrop-blur-xl border-b border-on-surface/10 bg-surface/10">
+<div class="flex items-center gap-element-gap">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-primary/30">
+<img class="w-full h-full object-cover" data-alt="A professional close-up portrait of a young entrepreneur in a high-tech office. The lighting is moody and cinematic with green neon accents reflecting off a glass desk. The aesthetic is clean, minimalist, and focused on financial clarity and modern technology." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBY67Aiyvc-PN3wGTHJj8TiiOIND7sX5eTderqgiT0TbVKBXqK8g9hiQZxrsNcUVkAX-KEACie7KTwG3c6P7htPZOUxYhNeNmaboqeO_PUAo8OodB87i96Fu5mZIFljf1liPmeFFgoMLZpkvwHAqtRYSE1hERh-EUuNYBrQrZxHIl5ouBZZVfyUbYTgC_2_Bh6Eq4B5l_8egBb_Ms1Azw6MTRaS9G9fmFoytTNxl-QsB66IU-3PCJuvbv06sgjsjRXeR2QLbYppeQo"/>
+</div>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">Reports</h1>
+</div>
+<button class="material-symbols-outlined text-primary active:scale-95 transition-transform">notifications</button>
+</header>
+<main class="mt-24 px-container-padding flex flex-col gap-stack-gap">
+<!-- Time Filter Chips -->
+<nav class="flex justify-between p-1 bg-surface-container/40 rounded-xl border border-white/5">
+<button class="flex-1 py-2 font-label-mono text-label-mono text-on-surface-variant transition-all hover:text-primary active:scale-95">Week</button>
+<button class="flex-1 py-2 font-label-mono text-label-mono text-primary bg-primary-container/20 border border-primary/20 rounded-lg active:scale-95">Month</button>
+<button class="flex-1 py-2 font-label-mono text-label-mono text-on-surface-variant transition-all hover:text-primary active:scale-95">Year</button>
+</nav>
+<!-- Key Metrics Row -->
+<section class="grid grid-cols-2 gap-element-gap">
+<div class="glass-card p-4 rounded-xl flex flex-col justify-between">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase tracking-wider">Total Savings</span>
+<div class="mt-2">
+<span class="font-headline-lg text-primary">$4,280</span>
+<div class="flex items-center text-[10px] text-primary mt-1">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>+12.5%</span>
+</div>
+</div>
+</div>
+<div class="glass-card p-4 rounded-xl flex flex-col justify-between border-l-4 border-l-tertiary">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase tracking-wider">Top Category</span>
+<div class="mt-2">
+<span class="font-headline-lg text-on-surface">Dining</span>
+<div class="flex items-center text-[10px] text-on-surface-variant mt-1">
+<span class="material-symbols-outlined text-sm">restaurant</span>
+<span>40% of Total</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Spending Donut Chart -->
+<section class="glass-card p-6 rounded-2xl relative overflow-hidden">
+<div class="flex flex-col gap-unit mb-6">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Category Breakdown</h2>
+<p class="font-label-mono text-label-mono text-on-surface-variant">March 2024</p>
+</div>
+<div class="flex flex-col md:flex-row items-center gap-8">
+<!-- SVG Donut -->
+<div class="relative w-48 h-48">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<!-- Background Circle -->
+<circle cx="18" cy="18" fill="transparent" r="15.9" stroke="rgba(255,255,255,0.05)" stroke-width="3.5"></circle>
+<!-- Food (40%) -->
+<circle class="chart-path" cx="18" cy="18" fill="transparent" r="15.9" stroke="#4edea3" stroke-dasharray="40 60" stroke-dashoffset="0" stroke-width="3.8"></circle>
+<!-- Rent (30%) -->
+<circle class="chart-path" cx="18" cy="18" fill="transparent" r="15.9" stroke="#f9bd22" stroke-dasharray="30 70" stroke-dashoffset="-40" stroke-width="3.8"></circle>
+<!-- Others (30%) -->
+<circle class="chart-path" cx="18" cy="18" fill="transparent" r="15.9" stroke="#2d3449" stroke-dasharray="30 70" stroke-dashoffset="-70" stroke-width="3.8"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-display-currency text-2xl text-on-surface">$2,450</span>
+<span class="font-label-mono text-[10px] text-on-surface-variant uppercase">Total Spent</span>
+</div>
+</div>
+<!-- Legend -->
+<div class="flex-1 w-full space-y-3">
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(78,222,163,0.5)]"></div>
+<span class="font-label-mono text-on-surface">Dining &amp; Food</span>
+</div>
+<span class="font-label-mono text-on-surface">40%</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<span class="font-label-mono text-on-surface">Rent &amp; Utilities</span>
+</div>
+<span class="font-label-mono text-on-surface">30%</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-surface-container-highest"></div>
+<span class="font-label-mono text-on-surface">Miscellaneous</span>
+</div>
+<span class="font-label-mono text-on-surface">30%</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Weekly Trend Line Chart -->
+<section class="glass-card p-6 rounded-2xl">
+<div class="flex justify-between items-end mb-6">
+<div class="flex flex-col gap-unit">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Spending Trend</h2>
+<p class="font-label-mono text-label-mono text-on-surface-variant">Last 7 Days</p>
+</div>
+<div class="text-right">
+<p class="font-label-mono text-label-mono text-primary">+4% vs last week</p>
+</div>
+</div>
+<div class="h-40 w-full relative mt-4">
+<svg class="w-full h-full overflow-visible" viewbox="0 0 400 150">
+<!-- Grid Lines -->
+<line stroke="rgba(255,255,255,0.05)" stroke-width="1" x1="0" x2="400" y1="0" y2="0"></line>
+<line stroke="rgba(255,255,255,0.05)" stroke-width="1" x1="0" x2="400" y1="50" y2="50"></line>
+<line stroke="rgba(255,255,255,0.05)" stroke-width="1" x1="0" x2="400" y1="100" y2="100"></line>
+<!-- Area Under Curve -->
+<path d="M0 130 C 50 110, 80 140, 120 100 C 160 60, 200 80, 240 50 C 280 20, 340 40, 400 10 L 400 150 L 0 150 Z" fill="url(#gradient-area)" opacity="0.3"></path>
+<!-- Line -->
+<path class="chart-path" d="M0 130 C 50 110, 80 140, 120 100 C 160 60, 200 80, 240 50 C 280 20, 340 40, 400 10" fill="none" stroke="#4edea3" stroke-linecap="round" stroke-width="3"></path>
+<!-- Gradients -->
+<defs>
+<lineargradient id="gradient-area" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#4edea3;stop-opacity:0.4"></stop>
+<stop offset="100%" style="stop-color:#4edea3;stop-opacity:0"></stop>
+</lineargradient>
+</defs>
+<!-- Data Points -->
+<circle class="animate-pulse" cx="120" cy="100" fill="#4edea3" r="4"></circle>
+<circle cx="240" cy="50" fill="#4edea3" r="4"></circle>
+<circle cx="400" cy="10" fill="#4edea3" r="4"></circle>
+</svg>
+</div>
+<div class="flex justify-between mt-4 font-label-mono text-[10px] text-on-surface-variant">
+<span>MON</span>
+<span>TUE</span>
+<span>WED</span>
+<span>THU</span>
+<span>FRI</span>
+<span>SAT</span>
+<span>SUN</span>
+</div>
+</section>
+<!-- Financial Health Insight -->
+<section class="active-glass p-6 rounded-2xl border-l-4 border-l-primary relative overflow-hidden group">
+<div class="absolute -top-12 -right-12 w-32 h-32 bg-primary/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
+<div class="flex items-start gap-4">
+<div class="bg-primary/20 p-3 rounded-xl border border-primary/20">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div class="space-y-2">
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Financial Health: Excellent</h3>
+<p class="font-body-md text-sm text-on-surface/80 leading-relaxed">
+                        Your spending on "Dining" is up by 15%, but you've successfully increased your "Savings" contribution by $450 this month. At this rate, you'll reach your vacation goal 2 months earlier than projected. Consider moving $200 to your high-yield portfolio.
+                    </p>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-glass-margin pb-6 pt-2 backdrop-blur-xl border-t border-on-surface/10 bg-surface-container/20 rounded-t-xl">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-mono text-label-mono">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-label-mono text-label-mono">Activity</span>
+</a>
+<button class="flex flex-col items-center justify-center text-primary active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-4xl">add_circle</span>
+<span class="font-label-mono text-label-mono">Add</span>
+</button>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">pie_chart</span>
+<span class="font-label-mono text-label-mono">Budgets</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary bg-primary-container/20 rounded-full px-4 py-1 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-label-mono text-label-mono">Reports</span>
+</a>
+</nav>
+<!-- Background Atmospheric Effect -->
+<div class="fixed top-0 left-0 w-full h-full -z-10 pointer-events-none opacity-40">
+
+</div>
+<script>
+        // Micro-interactions for chips
+        const filterBtns = document.querySelectorAll('nav button');
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterBtns.forEach(b => {
+                    b.classList.remove('text-primary', 'bg-primary-container/20', 'border', 'border-primary/20', 'rounded-lg');
+                    b.classList.add('text-on-surface-variant');
+                });
+                btn.classList.add('text-primary', 'bg-primary-container/20', 'border', 'border-primary/20', 'rounded-lg');
+                btn.classList.remove('text-on-surface-variant');
+            });
+        });
+    </script>
+</body></html>
