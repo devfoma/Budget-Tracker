@@ -7,6 +7,7 @@ import {
 } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -16,13 +17,13 @@ import {
   Bell,
   Bus,
   Calendar,
+  Camera,
   CheckCircle,
   ChevronRight,
   CirclePlus,
   Filter,
   Gift,
   GraduationCap,
-  HeartPulse,
   Home,
   LayoutDashboard,
   LockKeyhole,
@@ -32,6 +33,7 @@ import {
   ReceiptText,
   RotateCcw,
   Search,
+  ShieldCheck,
   ShoppingBag,
   Tags,
   TrendingUp,
@@ -51,9 +53,11 @@ import React, {
   useState,
 } from 'react';
 import {
+  Alert,
   Animated,
   DimensionValue,
   Easing,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -82,8 +86,12 @@ type ReportRange = 'Week' | 'Month' | 'Year';
 type Profile = {
   id: string;
   fullName: string;
+  email?: string;
   currency: string;
+  monthlyIncomeEstimate?: number;
+  avatarUri?: string;
   appLockEnabled: boolean;
+  hasCompletedProfile: boolean;
 };
 
 type Transaction = {
@@ -111,6 +119,7 @@ type AppData = {
   alertsRead: boolean;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
   addBudget: (budget: Omit<Budget, 'id'>) => void;
+  updateProfile: (profile: Partial<Profile>) => void;
   toggleAppLock: () => void;
   markAlertsRead: () => void;
 };
@@ -147,9 +156,13 @@ const methods = ['Cash', 'Transfer', 'Card', 'POS'];
 
 const defaultProfile: Profile = {
   id: uid('user'),
-  fullName: 'User',
-  currency: 'NGN',
+  fullName: '',
+  email: '',
+  currency: '₦',
+  monthlyIncomeEstimate: undefined,
+  avatarUri: undefined,
   appLockEnabled: true,
+  hasCompletedProfile: false,
 };
 
 const legacyDemoTransactionIds = new Set(['txn-1', 'txn-2', 'txn-3', 'txn-4']);
@@ -159,8 +172,8 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function formatMoney(amount: number) {
-  return `NGN ${Math.round(amount).toLocaleString('en-NG')}`;
+function formatMoney(amount: number, currency = '₦') {
+  return `${currency || '₦'}${Math.round(amount).toLocaleString('en-NG')}`;
 }
 
 function sumTransactions(transactions: Transaction[], type: TransactionType) {
@@ -178,6 +191,18 @@ function getInitials(name: string) {
     .slice(0, 2)
     .join('');
   return initials.toUpperCase() || 'U';
+}
+
+function normalizeProfile(profile: Partial<Profile> | null): Profile {
+  const fullName = profile?.fullName?.trim() ?? '';
+  return {
+    ...defaultProfile,
+    ...profile,
+    id: profile?.id || uid('user'),
+    fullName,
+    currency: profile?.currency || '₦',
+    hasCompletedProfile: Boolean(profile?.hasCompletedProfile || (fullName && fullName !== 'Alex' && fullName !== 'User')),
+  };
 }
 
 function getRangeDays(range: ReportRange) {
@@ -293,7 +318,7 @@ function getCategoryIcon(category: string) {
     case 'Bills':
       return Home;
     case 'Health':
-      return HeartPulse;
+      return ShieldCheck;
     case 'Shopping':
       return ShoppingBag;
     case 'Data':
@@ -335,9 +360,9 @@ function AppDataProvider({ children }: { children: ReactNode }) {
       ]);
 
       if (storedProfile) {
-        setProfile(JSON.parse(storedProfile) as Profile);
+        setProfile(normalizeProfile(JSON.parse(storedProfile) as Partial<Profile>));
       } else {
-        const freshProfile = { ...defaultProfile, id: uid('user') };
+        const freshProfile = normalizeProfile(null);
         setProfile(freshProfile);
         await AsyncStorage.setItem(storageKeys.profile, JSON.stringify(freshProfile));
       }
@@ -396,6 +421,15 @@ function AppDataProvider({ children }: { children: ReactNode }) {
       addBudget: (budget) => {
         setBudgets((current) => [{ id: uid('budget'), ...budget }, ...current]);
       },
+      updateProfile: (profileUpdates) => {
+        setProfile((current) =>
+          normalizeProfile({
+            ...current,
+            ...profileUpdates,
+            hasCompletedProfile: true,
+          }),
+        );
+      },
       toggleAppLock: () => {
         setProfile((current) => ({ ...current, appLockEnabled: !current.appLockEnabled }));
       },
@@ -408,7 +442,7 @@ function AppDataProvider({ children }: { children: ReactNode }) {
     return (
       <GradientShell>
         <View style={styles.loadingWrap}>
-          <HeartPulse color={colors.primary} size={34} />
+          <ShieldCheck color={colors.primary} size={34} />
           <Text style={styles.loadingTitle}>Budget Tracker</Text>
           <Text style={styles.loadingText}>Preparing your local workspace</Text>
         </View>
@@ -630,6 +664,24 @@ function CategoryBadge({ category }: { category: string }) {
   );
 }
 
+function AvatarDisplay({ profile, size = 44 }: { profile: Profile; size?: number }) {
+  const radius = size / 2;
+  if (profile.avatarUri) {
+    return (
+      <Image
+        source={{ uri: profile.avatarUri }}
+        style={[styles.avatarImage, { borderRadius: radius, height: size, width: size }]}
+      />
+    );
+  }
+
+  return (
+    <View style={[styles.avatar, { borderRadius: radius, height: size, width: size }]}>
+      <Text style={styles.avatarText}>{getInitials(profile.fullName)}</Text>
+    </View>
+  );
+}
+
 function ProgressBar({ progress, warning = false }: { progress: number; warning?: boolean }) {
   const width = `${progress <= 0 ? 0 : Math.min(100, Math.max(4, progress * 100))}%` as DimensionValue;
   return (
@@ -640,6 +692,7 @@ function ProgressBar({ progress, warning = false }: { progress: number; warning?
 }
 
 function TransactionRow({ transaction }: { transaction: Transaction }) {
+  const { profile } = useAppData();
   const Icon = getCategoryIcon(transaction.category);
   const isIncome = transaction.type === 'income';
   return (
@@ -659,7 +712,7 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
       </View>
       <View style={styles.transactionAmountWrap}>
         <Text style={[styles.transactionAmount, isIncome ? styles.goodText : styles.badText]}>
-          {isIncome ? '+' : '-'} {formatMoney(transaction.amount)}
+          {isIncome ? '+' : '-'} {formatMoney(transaction.amount, profile.currency)}
         </Text>
         <Text style={styles.transactionTime}>
           {new Date(transaction.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -673,9 +726,11 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
   const { profile, transactions, budgets, alertsRead, markAlertsRead } = useAppData();
   const { income, expenses, balance, spentByCategory } = useSummary();
   const [showAlerts, setShowAlerts] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
   const spendingCategories = spentByCategory.filter((item) => item.amount > 0);
   const savingsRate = getSavingsRate(income, expenses);
   const dailyAverage = getAverageDailyExpense(transactions, expenses);
+  const money = (amount: number) => formatMoney(amount, profile.currency);
 
   const budgetWarnings = budgets.filter((budget) => {
     const spent = transactions
@@ -686,7 +741,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
 
   return (
     <ScreenShell
-      title={`Hello, ${profile.fullName}`}
+      title={`Hello, ${profile.fullName || 'there'}`}
       subtitle="Your money snapshot is ready."
       rightAction={
         <View style={styles.headerActions}>
@@ -699,9 +754,9 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
             active={!alertsRead && budgetWarnings.length > 0}
             icon={<Bell color={colors.primary} size={22} />}
           />
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(profile.fullName)}</Text>
-          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Edit profile" onPress={() => setProfileVisible(true)}>
+            <AvatarDisplay profile={profile} />
+          </Pressable>
         </View>
       }
     >
@@ -731,10 +786,17 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
 
         <GlassCard tone="accent">
           <Text style={styles.kicker}>Total balance</Text>
-          <Text style={styles.balance}>{formatMoney(balance)}</Text>
+          <Text style={styles.balance}>{money(balance)}</Text>
           <View style={styles.statRow}>
-            <MiniStat label="Income" value={formatMoney(income)} tone="good" />
-            <MiniStat label="Expense" value={formatMoney(expenses)} tone="bad" />
+            <MiniStat label="Income" value={money(income)} tone="good" />
+            <MiniStat label="Expense" value={money(expenses)} tone="bad" />
+          </View>
+          <View style={styles.dashboardActionRow}>
+            <PrimaryButton
+              label="Add transaction"
+              onPress={() => navigation.navigate('Add')}
+              icon={<Plus color="#06251a" size={19} />}
+            />
           </View>
         </GlassCard>
 
@@ -748,7 +810,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
                 spendingCategories.slice(0, 3).map((item) => (
                   <View key={item.category} style={styles.rowBetween}>
                     <CategoryBadge category={item.category} />
-                    <Text style={styles.amountSmall}>{formatMoney(item.amount)}</Text>
+                    <Text style={styles.amountSmall}>{money(item.amount)}</Text>
                   </View>
                 ))
               )}
@@ -757,7 +819,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
           <View style={styles.sideStack}>
             <GlassCard>
               <Text style={styles.kicker}>Daily avg</Text>
-              <Text style={styles.sideValue}>{formatMoney(dailyAverage)}</Text>
+              <Text style={styles.sideValue}>{money(dailyAverage)}</Text>
             </GlassCard>
             <GlassCard tone="accent">
               <Text style={styles.kicker}>Savings rate</Text>
@@ -791,7 +853,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
                 <View style={styles.rowBetween}>
                   <CategoryBadge category={budget.category} />
                   <Text style={styles.amountSmall}>
-                    {formatMoney(spent)} / {formatMoney(budget.limit)}
+                    {money(spent)} / {money(budget.limit)}
                   </Text>
                 </View>
                 <ProgressBar progress={progress} warning={progress >= budget.threshold / 100} />
@@ -821,6 +883,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
           )}
         </GlassCard>
       </ScrollView>
+      <ProfileEditor visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </ScreenShell>
   );
 }
@@ -1020,13 +1083,14 @@ function AddScreen({ navigation }: ScreenProps<'Add'>) {
 }
 
 function BudgetsScreen() {
-  const { budgets, transactions, addBudget } = useAppData();
+  const { profile, budgets, transactions, addBudget } = useAppData();
   const { budgetTotal, budgetSpent } = useSummary();
   const [modalVisible, setModalVisible] = useState(false);
   const [category, setCategory] = useState('Food');
   const [amount, setAmount] = useState('');
   const [threshold, setThreshold] = useState(80);
   const parsedAmount = Number(amount.replace(/,/g, ''));
+  const money = (value: number) => formatMoney(value, profile.currency);
 
   function createBudget() {
     if (parsedAmount <= 0) {
@@ -1059,10 +1123,10 @@ function BudgetsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <GlassCard tone="accent">
           <Text style={styles.kicker}>Total budgeted</Text>
-          <Text style={styles.balance}>{formatMoney(budgetTotal)}</Text>
+          <Text style={styles.balance}>{money(budgetTotal)}</Text>
           <View style={styles.statRow}>
-            <MiniStat label="Spent" value={formatMoney(budgetSpent)} tone="bad" />
-            <MiniStat label="Remaining" value={formatMoney(Math.max(0, budgetTotal - budgetSpent))} tone="good" />
+            <MiniStat label="Spent" value={money(budgetSpent)} tone="bad" />
+            <MiniStat label="Remaining" value={money(Math.max(0, budgetTotal - budgetSpent))} tone="good" />
           </View>
         </GlassCard>
 
@@ -1080,7 +1144,7 @@ function BudgetsScreen() {
               </View>
               <Text style={styles.budgetName}>{budget.name}</Text>
               <Text style={styles.bodyText}>
-                {formatMoney(spent)} spent from {formatMoney(budget.limit)}
+                {money(spent)} spent from {money(budget.limit)}
               </Text>
               <ProgressBar progress={progress} warning={isWarning} />
               <Text style={styles.mutedText}>Alert at {budget.threshold}%</Text>
@@ -1137,7 +1201,7 @@ function BudgetsScreen() {
 }
 
 function ReportsScreen() {
-  const { transactions, budgets } = useAppData();
+  const { profile, transactions, budgets } = useAppData();
   const [range, setRange] = useState<ReportRange>('Month');
   const rangeTransactions = useMemo(() => getTransactionsInRange(transactions, range), [range, transactions]);
   const previousRangeTransactions = useMemo(() => getTransactionsInRange(transactions, range, 1), [range, transactions]);
@@ -1158,6 +1222,7 @@ function ReportsScreen() {
   const totalSpend = Math.max(1, expenses);
   const trendPoints = buildTrendPoints(rangeTransactions, range);
   const healthLabel = getFinancialHealthLabel(income, expenses, budgets);
+  const money = (amount: number) => formatMoney(amount, profile.currency);
 
   return (
     <ScreenShell title="Reports" subtitle="Simple insights from local records.">
@@ -1178,13 +1243,13 @@ function ReportsScreen() {
         <View style={styles.twoColumn}>
           <GlassCard style={styles.flexCard}>
             <Text style={styles.kicker}>Total savings</Text>
-            <Text style={styles.sideValue}>{formatMoney(savings)}</Text>
+            <Text style={styles.sideValue}>{money(savings)}</Text>
             <Text style={styles.goodText}>{savingsRate}% saved</Text>
           </GlassCard>
           <GlassCard tone="warning" style={styles.flexCard}>
             <Text style={styles.kicker}>Top category</Text>
             <Text style={styles.sideValue}>{topCategory?.category ?? 'None'}</Text>
-            <Text style={styles.mutedText}>{formatMoney(topCategory?.amount ?? 0)}</Text>
+            <Text style={styles.mutedText}>{money(topCategory?.amount ?? 0)}</Text>
           </GlassCard>
         </View>
 
@@ -1210,7 +1275,7 @@ function ReportsScreen() {
               />
             </Svg>
             <View style={styles.donutCenter}>
-              <Text style={styles.donutAmount}>{formatMoney(expenses)}</Text>
+              <Text style={styles.donutAmount}>{money(expenses)}</Text>
               <Text style={styles.kicker}>Spent</Text>
             </View>
           </View>
@@ -1253,11 +1318,11 @@ function ReportsScreen() {
 
         <GlassCard tone="accent">
           <View style={styles.rowSmall}>
-            <HeartPulse color={colors.primary} size={26} />
+            <ShieldCheck color={colors.primary} size={26} />
             <Text style={styles.cardTitle}>{healthLabel}</Text>
           </View>
           <Text style={styles.bodyText}>
-            Income is {formatMoney(income)} and your active budgets cover {budgets.length} spending areas. Keep recording
+            Income is {money(income)} and your active budgets cover {budgets.length} spending areas. Keep recording
             daily expenses so the dashboard stays useful.
           </Text>
         </GlassCard>
@@ -1266,7 +1331,166 @@ function ReportsScreen() {
   );
 }
 
+function ProfileEditor({
+  visible,
+  required = false,
+  onClose,
+}: {
+  visible: boolean;
+  required?: boolean;
+  onClose: () => void;
+}) {
+  const { profile, updateProfile } = useAppData();
+  const [fullName, setFullName] = useState(profile.fullName);
+  const [email, setEmail] = useState(profile.email ?? '');
+  const [currency, setCurrency] = useState(profile.currency || '₦');
+  const [monthlyIncome, setMonthlyIncome] = useState(
+    profile.monthlyIncomeEstimate ? String(profile.monthlyIncomeEstimate) : '',
+  );
+  const [avatarUri, setAvatarUri] = useState(profile.avatarUri);
+
+  useEffect(() => {
+    if (visible) {
+      setFullName(profile.fullName);
+      setEmail(profile.email ?? '');
+      setCurrency(profile.currency || '₦');
+      setMonthlyIncome(profile.monthlyIncomeEstimate ? String(profile.monthlyIncomeEstimate) : '');
+      setAvatarUri(profile.avatarUri);
+    }
+  }, [profile, visible]);
+
+  async function chooseAvatar() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Photo access needed', 'Allow photo access to choose a profile image.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.75,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+
+    if (!result.canceled && result.assets[0]?.uri) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  }
+
+  function saveProfile() {
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      Alert.alert('Name required', 'Add your name so Budget Tracker can personalize the app.');
+      return;
+    }
+
+    updateProfile({
+      fullName: trimmedName,
+      email: email.trim(),
+      currency: currency.trim().toUpperCase() || '₦',
+      monthlyIncomeEstimate: Number(monthlyIncome.replace(/,/g, '')) || undefined,
+      avatarUri,
+    });
+    onClose();
+  }
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={required ? undefined : onClose}>
+      <View style={styles.modalBackdrop}>
+        <ScrollView contentContainerStyle={styles.profileModalScroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View>
+                <Text style={styles.modalTitle}>{required ? 'Set up profile' : 'Edit profile'}</Text>
+                <Text style={styles.bodyText}>Your details stay on this phone.</Text>
+              </View>
+              {!required ? (
+                <Pressable accessibilityRole="button" onPress={onClose}>
+                  <X color={colors.muted} size={22} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <Pressable accessibilityRole="button" onPress={chooseAvatar} style={styles.avatarPicker}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarPreviewImage} />
+              ) : (
+                <View style={styles.avatarPreviewFallback}>
+                  <Camera color={colors.primary} size={28} />
+                </View>
+              )}
+              <Text style={styles.linkText}>{avatarUri ? 'Change photo' : 'Add photo'}</Text>
+            </Pressable>
+
+            <Text style={styles.inputLabel}>Full name</Text>
+            <TextInput
+              placeholder="Your name"
+              placeholderTextColor={colors.soft}
+              value={fullName}
+              onChangeText={setFullName}
+              style={styles.textInput}
+            />
+
+            <Text style={styles.inputLabel}>Email optional</Text>
+            <TextInput
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholder="you@example.com"
+              placeholderTextColor={colors.soft}
+              value={email}
+              onChangeText={setEmail}
+              style={styles.textInput}
+            />
+
+            <View style={styles.profileInlineInputs}>
+              <View style={styles.profileInlineField}>
+                <Text style={styles.inputLabel}>Currency</Text>
+                <TextInput
+                  placeholder="₦"
+                  placeholderTextColor={colors.soft}
+                  value={currency}
+                  onChangeText={setCurrency}
+                  style={styles.textInput}
+                  maxLength={4}
+                />
+              </View>
+              <View style={styles.profileInlineField}>
+                <Text style={styles.inputLabel}>Monthly income</Text>
+                <TextInput
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.soft}
+                  value={monthlyIncome}
+                  onChangeText={setMonthlyIncome}
+                  style={styles.textInput}
+                />
+              </View>
+            </View>
+
+            <PrimaryButton label={required ? 'Start tracking' : 'Save profile'} onPress={saveProfile} />
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+function ProfileSetupGate() {
+  const { profile } = useAppData();
+  const [visible, setVisible] = useState(!profile.hasCompletedProfile);
+
+  useEffect(() => {
+    if (!profile.hasCompletedProfile) {
+      setVisible(true);
+    }
+  }, [profile.hasCompletedProfile]);
+
+  return <ProfileEditor visible={visible} required onClose={() => setVisible(false)} />;
+}
+
 function AppTour() {
+  const { profile } = useAppData();
   const [visible, setVisible] = useState(false);
   const [index, setIndex] = useState(0);
 
@@ -1296,10 +1520,10 @@ function AppTour() {
   useEffect(() => {
     async function load() {
       const complete = await AsyncStorage.getItem(storageKeys.tour);
-      setVisible(complete !== 'true');
+      setVisible(profile.hasCompletedProfile && complete !== 'true');
     }
     void load();
-  }, []);
+  }, [profile.hasCompletedProfile]);
 
   useEffect(() => {
     if (visible && navigationRef.isReady()) {
@@ -1322,7 +1546,7 @@ function AppTour() {
   return (
     <View style={styles.tourOverlay}>
       <View style={styles.tourSpotlight}>
-        <HeartPulse color={colors.primary} size={26} />
+        <ShieldCheck color={colors.primary} size={26} />
         <Text style={styles.tourSpotlightText}>{step.route}</Text>
       </View>
       <View style={styles.tourCard}>
@@ -1414,6 +1638,7 @@ export default function App() {
         <NavigationContainer ref={navigationRef}>
           <StatusBar style="light" />
           <MainTabs />
+          <ProfileSetupGate />
           <AppTour />
         </NavigationContainer>
       </AppDataProvider>
@@ -1469,6 +1694,34 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     width: 44,
+  },
+  avatarImage: {
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  avatarPicker: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 10,
+    marginVertical: 18,
+  },
+  avatarPreviewFallback: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(78, 222, 163, 0.1)',
+    borderColor: 'rgba(78, 222, 163, 0.28)',
+    borderRadius: 42,
+    borderWidth: 1,
+    height: 84,
+    justifyContent: 'center',
+    width: 84,
+  },
+  avatarPreviewImage: {
+    borderColor: 'rgba(78, 222, 163, 0.42)',
+    borderRadius: 42,
+    borderWidth: 1,
+    height: 84,
+    width: 84,
   },
   avatarText: {
     color: colors.primary,
@@ -1567,6 +1820,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 17,
     fontWeight: '700',
+  },
+  dashboardActionRow: {
+    marginTop: 14,
   },
   donutAmount: {
     color: colors.text,
@@ -1737,6 +1993,20 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.76,
     transform: [{ scale: 0.98 }],
+  },
+  profileInlineField: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileInlineInputs: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  profileModalScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 24,
+    width: '100%',
   },
   primaryButton: {
     alignItems: 'center',
