@@ -1,5 +1,5 @@
 ---
-name: Luminous Finance
+name: Budget Tracker
 colors:
   surface: '#f7f9fb'
   surface-dim: '#d8dadc'
@@ -111,7 +111,7 @@ spacing:
 ---
 
 ## Brand & Style
-The design system for this financial product centers on "Trust through Transparency." It utilizes a refined **Glassmorphism** aesthetic to evoke a sense of depth and clarity, moving away from traditional, heavy corporate interfaces toward something that feels light, airy, and modern. 
+The design system for Budget Tracker centers on "Trust through Transparency." It utilizes a refined **Glassmorphism** aesthetic to evoke a sense of depth and clarity, moving away from traditional, heavy corporate interfaces toward something that feels light, airy, and modern. 
 
 The target audience consists of professionals and investors who value precision but appreciate a contemporary, high-end digital experience. The emotional response should be one of "calm confidence"—achieved through expansive whitespace, crisp typography, and subtle layering that suggests a sophisticated, multi-dimensional data environment.
 

@@ -1,5 +1,5 @@
 ---
-name: Luminous Finance
+name: Budget Tracker
 colors:
   surface: '#f7f9fb'
   surface-dim: '#d8dadc'

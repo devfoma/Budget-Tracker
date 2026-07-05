@@ -1,5 +1,5 @@
 ---
-name: Luminous Finance
+name: Budget Tracker
 colors:
   surface: '#0b1326'
   surface-dim: '#0b1326'
@@ -93,7 +93,7 @@ spacing:
 
 ## Brand & Style
 
-The design system is centered on the concept of "Clarity through Depth." Designed for high-frequency mobile financial tracking, it utilizes a **Glassmorphic** aesthetic to create a sense of lightness and premium quality. By layering translucent surfaces over vibrant, organic background gradients, the UI minimizes cognitive load while maintaining a sophisticated, modern feel.
+The design system is centered on the concept of "Confidence through Depth." Designed for high-frequency mobile financial tracking, it utilizes a **Glassmorphic** aesthetic to create a sense of lightness and premium quality. By layering translucent surfaces over vibrant, organic background gradients, the UI minimizes cognitive load while maintaining a sophisticated, modern feel.
 
 The brand personality is **Trustworthy, Visionary, and Precise**. It avoids the heavy, static feel of traditional banking apps in favor of a dynamic interface that feels like a tool for the future. The emotional response should be one of "Financial Calm"—where complex data feels organized and airy rather than claustrophobic.
 
