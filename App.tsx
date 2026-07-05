@@ -19,12 +19,14 @@ import {
   Calendar,
   Camera,
   CheckCircle,
+  ChevronDown,
   ChevronRight,
   CirclePlus,
   Filter,
   Gift,
   GraduationCap,
   Home,
+  Info,
   LayoutDashboard,
   LockKeyhole,
   MoreHorizontal,
@@ -493,11 +495,13 @@ function ScreenShell({
   subtitle,
   children,
   rightAction,
+  showAppName = true,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   rightAction?: ReactNode;
+  showAppName?: boolean;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(18)).current;
@@ -525,7 +529,7 @@ function ScreenShell({
       <View style={styles.safe}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <View>
-            <Text style={styles.appName}>Budget Tracker</Text>
+            {showAppName ? <Text style={styles.appName}>Budget Tracker</Text> : null}
             <Text style={styles.screenTitle}>{title}</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
@@ -743,6 +747,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
     <ScreenShell
       title={`Hello, ${profile.fullName || 'there'}`}
       subtitle="Your money snapshot is ready."
+      showAppName={false}
       rightAction={
         <View style={styles.headerActions}>
           <IconButton
