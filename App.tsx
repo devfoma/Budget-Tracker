@@ -616,6 +616,120 @@ function PillButton({
   );
 }
 
+type DropdownOption<T extends string> = {
+  label: string;
+  value: T;
+};
+
+function InfoButton({ title, message }: { title: string; message: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`About ${title}`}
+      onPress={() => {
+        hapticTap();
+        Alert.alert(title, message);
+      }}
+      style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]}
+    >
+      <Info color={colors.primary} size={16} />
+    </Pressable>
+  );
+}
+
+function TitleWithInfo({ title, message }: { title: string; message: string }) {
+  return (
+    <View style={styles.titleWithInfo}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      <InfoButton title={title} message={message} />
+    </View>
+  );
+}
+
+function SectionTitleWithInfo({ title, message }: { title: string; message: string }) {
+  return (
+    <View style={styles.titleWithInfo}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <InfoButton title={title} message={message} />
+    </View>
+  );
+}
+
+function DropdownSelect<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: DropdownOption<T>[];
+  onChange: (value: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <View style={styles.dropdownWrap}>
+      <Text style={styles.dropdownLabel}>{label}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Select ${label}`}
+        onPress={() => {
+          hapticTap();
+          setOpen(true);
+        }}
+        style={({ pressed }) => [styles.dropdownButton, pressed && styles.pressed]}
+      >
+        <Text style={styles.dropdownValue}>{selected.label}</Text>
+        <ChevronDown color={colors.primary} size={18} />
+      </Pressable>
+
+      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.dropdownMenuCard}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.modalTitle}>{label}</Text>
+              <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
+                <X color={colors.muted} size={22} />
+              </Pressable>
+            </View>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.dropdownOptionList}
+            >
+              {options.map((option) => {
+                const active = option.value === value;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={option.value}
+                    onPress={() => {
+                      hapticTap();
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.dropdownOption,
+                      active && styles.dropdownOptionActive,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}>
+                      {option.label}
+                    </Text>
+                    {active ? <CheckCircle color={colors.primary} size={18} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 function PrimaryButton({
   label,
   onPress,
@@ -790,7 +904,13 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
         ) : null}
 
         <GlassCard tone="accent">
-          <Text style={styles.kicker}>Total balance</Text>
+          <View style={styles.rowBetween}>
+            <Text style={styles.kicker}>Total balance</Text>
+            <InfoButton
+              title="Total balance"
+              message="Your balance is calculated from saved income minus saved expenses."
+            />
+          </View>
           <Text style={styles.balance}>{money(balance)}</Text>
           <View style={styles.statRow}>
             <MiniStat label="Income" value={money(income)} tone="good" />
@@ -807,7 +927,10 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
 
         <View style={styles.twoColumn}>
           <GlassCard style={styles.flexCard}>
-            <Text style={styles.cardTitle}>Spending</Text>
+            <TitleWithInfo
+              title="Spending"
+              message="This section groups your saved expenses by category so you can spot where money is going."
+            />
             <View style={styles.categoryList}>
               {spendingCategories.length === 0 ? (
                 <Text style={styles.bodyText}>Add an expense to see category totals.</Text>
@@ -834,7 +957,10 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Active budgets</Text>
+          <SectionTitleWithInfo
+            title="Active budgets"
+            message="Active budgets compare your category spending with limits you created."
+          />
           <Pressable accessibilityRole="button" onPress={() => navigation.navigate('Budgets')}>
             <Text style={styles.linkText}>View all</Text>
           </Pressable>
@@ -869,7 +995,10 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
         )}
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent activity</Text>
+          <SectionTitleWithInfo
+            title="Recent activity"
+            message="Recent activity shows the latest transactions recorded by the user."
+          />
           <Pressable accessibilityRole="button" onPress={() => navigation.navigate('Activity')}>
             <Text style={styles.linkText}>History</Text>
           </Pressable>
@@ -899,6 +1028,20 @@ function ActivityScreen({ navigation }: ScreenProps<'Activity'>) {
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [methodFilter, setMethodFilter] = useState('All');
+  const typeOptions: DropdownOption<'all' | TransactionType>[] = [
+    { label: 'All transactions', value: 'all' },
+    { label: 'Income only', value: 'income' },
+    { label: 'Expenses only', value: 'expense' },
+  ];
+  const categoryOptions: DropdownOption<string>[] = [
+    { label: 'All categories', value: 'All' },
+    ...expenseCategories.map((category) => ({ label: category, value: category })),
+    ...incomeCategories.map((category) => ({ label: category, value: category })),
+  ];
+  const methodOptions: DropdownOption<string>[] = [
+    { label: 'All methods', value: 'All' },
+    ...methods.map((method) => ({ label: method, value: method })),
+  ];
 
   const filtered = transactions.filter((transaction) => {
     const matchesQuery =
@@ -933,45 +1076,37 @@ function ActivityScreen({ navigation }: ScreenProps<'Activity'>) {
             style={styles.searchInput}
           />
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          <PillButton
-            label={typeFilter === 'all' ? 'Type' : typeFilter}
-            onPress={() => setTypeFilter(typeFilter === 'all' ? 'income' : typeFilter === 'income' ? 'expense' : 'all')}
-            active={typeFilter !== 'all'}
-          />
-          <PillButton
-            label={categoryFilter === 'All' ? 'Category' : categoryFilter}
-            onPress={() => {
-              const options = ['All', ...expenseCategories, ...incomeCategories];
-              const next = (options.indexOf(categoryFilter) + 1) % options.length;
-              setCategoryFilter(options[next]);
-            }}
-            active={categoryFilter !== 'All'}
-          />
-          <PillButton
-            label={methodFilter === 'All' ? 'Method' : methodFilter}
-            onPress={() => {
-              const options = ['All', ...methods];
-              const next = (options.indexOf(methodFilter) + 1) % options.length;
-              setMethodFilter(options[next]);
-            }}
-            active={methodFilter !== 'All'}
-          />
-          <PillButton
-            label="Reset"
-            onPress={() => {
-              setQuery('');
-              setTypeFilter('all');
-              setCategoryFilter('All');
-              setMethodFilter('All');
-            }}
-          />
-        </ScrollView>
+
+        <GlassCard>
+          <View style={styles.rowBetween}>
+            <TitleWithInfo
+              title="Filters"
+              message="Use filters to narrow activity by transaction type, spending category, or payment method."
+            />
+            <PillButton
+              label="Reset"
+              onPress={() => {
+                setQuery('');
+                setTypeFilter('all');
+                setCategoryFilter('All');
+                setMethodFilter('All');
+              }}
+            />
+          </View>
+          <View style={styles.dropdownGrid}>
+            <DropdownSelect label="Type" value={typeFilter} options={typeOptions} onChange={setTypeFilter} />
+            <DropdownSelect label="Category" value={categoryFilter} options={categoryOptions} onChange={setCategoryFilter} />
+            <DropdownSelect label="Method" value={methodFilter} options={methodOptions} onChange={setMethodFilter} />
+          </View>
+        </GlassCard>
 
         <GlassCard>
           <View style={styles.rowSmall}>
             <Calendar color={colors.primary} size={20} />
-            <Text style={styles.cardTitle}>Transactions</Text>
+            <TitleWithInfo
+              title="Transactions"
+              message="This list shows the income and expense records saved on this device. Search and filters change what appears here."
+            />
           </View>
           {filtered.length === 0 ? (
             <View style={styles.emptyState}>
@@ -1127,7 +1262,13 @@ function BudgetsScreen() {
     >
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <GlassCard tone="accent">
-          <Text style={styles.kicker}>Total budgeted</Text>
+          <View style={styles.rowBetween}>
+            <Text style={styles.kicker}>Total budgeted</Text>
+            <InfoButton
+              title="Total budgeted"
+              message="This total adds up the budget limits you created and compares them with matching expense records."
+            />
+          </View>
           <Text style={styles.balance}>{money(budgetTotal)}</Text>
           <View style={styles.statRow}>
             <MiniStat label="Spent" value={money(budgetSpent)} tone="bad" />
@@ -1169,9 +1310,15 @@ function BudgetsScreen() {
 
       <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.modalTitle}>New budget</Text>
+            <View style={styles.modalCard}>
+              <View style={styles.rowBetween}>
+              <View style={styles.titleWithInfo}>
+                <Text style={styles.modalTitle}>New budget</Text>
+                <InfoButton
+                  title="New budget"
+                  message="Create a budget to track expenses for one category against a limit and alert threshold."
+                />
+              </View>
               <Pressable accessibilityRole="button" onPress={() => setModalVisible(false)}>
                 <X color={colors.muted} size={22} />
               </Pressable>
@@ -1247,19 +1394,34 @@ function ReportsScreen() {
 
         <View style={styles.twoColumn}>
           <GlassCard style={styles.flexCard}>
-            <Text style={styles.kicker}>Total savings</Text>
+            <View style={styles.rowBetween}>
+              <Text style={styles.kicker}>Total savings</Text>
+              <InfoButton
+                title="Total savings"
+                message="Savings is the income left after expenses for the selected report range."
+              />
+            </View>
             <Text style={styles.sideValue}>{money(savings)}</Text>
             <Text style={styles.goodText}>{savingsRate}% saved</Text>
           </GlassCard>
           <GlassCard tone="warning" style={styles.flexCard}>
-            <Text style={styles.kicker}>Top category</Text>
+            <View style={styles.rowBetween}>
+              <Text style={styles.kicker}>Top category</Text>
+              <InfoButton
+                title="Top category"
+                message="Top category is the expense category with the highest spending in the selected range."
+              />
+            </View>
             <Text style={styles.sideValue}>{topCategory?.category ?? 'None'}</Text>
             <Text style={styles.mutedText}>{money(topCategory?.amount ?? 0)}</Text>
           </GlassCard>
         </View>
 
         <GlassCard>
-          <Text style={styles.cardTitle}>Category breakdown</Text>
+          <TitleWithInfo
+            title="Category breakdown"
+            message="The chart shows how your expenses are distributed across categories for the selected range."
+          />
           <View style={styles.donutWrap}>
             <Svg height="170" width="170" viewBox="0 0 170 170">
               <Circle cx="85" cy="85" r="58" stroke="#2c364f" strokeWidth="24" fill="none" />
@@ -1304,7 +1466,10 @@ function ReportsScreen() {
 
         <GlassCard>
           <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>Spending trend</Text>
+            <TitleWithInfo
+              title="Spending trend"
+              message="The trend line plots saved expenses across the selected week, month, or year."
+            />
             <Text style={expenseChange > 0 ? styles.badText : styles.goodText}>
               {formatChange(expenseChange)} vs last {range.toLowerCase()}
             </Text>
@@ -1324,7 +1489,10 @@ function ReportsScreen() {
         <GlassCard tone="accent">
           <View style={styles.rowSmall}>
             <ShieldCheck color={colors.primary} size={26} />
-            <Text style={styles.cardTitle}>{healthLabel}</Text>
+            <TitleWithInfo
+              title={healthLabel}
+              message="Financial health summarizes the current report range using your recorded income, expenses, and active budgets."
+            />
           </View>
           <Text style={styles.bodyText}>
             Income is {money(income)} and your active budgets cover {budgets.length} spending areas. Keep recording
@@ -1845,6 +2013,73 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: 16,
   },
+  dropdownButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(9, 18, 35, 0.46)',
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: 14,
+  },
+  dropdownGrid: {
+    gap: 12,
+    marginTop: 14,
+  },
+  dropdownLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  dropdownMenuCard: {
+    backgroundColor: '#121c31',
+    borderColor: colors.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    maxHeight: '78%',
+    padding: 18,
+    width: '100%',
+  },
+  dropdownOption: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  dropdownOptionActive: {
+    backgroundColor: 'rgba(78, 222, 163, 0.14)',
+    borderColor: 'rgba(78, 222, 163, 0.5)',
+  },
+  dropdownOptionList: {
+    gap: 10,
+    marginTop: 18,
+  },
+  dropdownOptionText: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  dropdownOptionTextActive: {
+    color: colors.primary,
+  },
+  dropdownValue: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  dropdownWrap: {
+    width: '100%',
+  },
   emptyState: {
     alignItems: 'center',
     gap: 8,
@@ -1884,6 +2119,16 @@ const styles = StyleSheet.create({
   },
   iconButtonActive: {
     borderColor: colors.primary,
+  },
+  infoButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(78, 222, 163, 0.1)',
+    borderColor: 'rgba(78, 222, 163, 0.34)',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
   },
   inputLabel: {
     color: colors.muted,
@@ -2294,6 +2539,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '800',
+  },
+  titleWithInfo: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: 8,
   },
   twoColumn: {
     flexDirection: 'row',
