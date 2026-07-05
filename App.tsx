@@ -529,6 +529,7 @@ function AppDataProvider({ children }: { children: ReactNode }) {
       },
       addBudget: (budget) => {
         setBudgets((current) => [{ id: uid('budget'), ...budget }, ...current]);
+        setAlertsRead(false);
       },
       updateBudget: (id, budgetUpdates) => {
         setBudgets((current) =>
@@ -541,6 +542,7 @@ function AppDataProvider({ children }: { children: ReactNode }) {
               : budget,
           ),
         );
+        setAlertsRead(false);
       },
       updateProfile: (profileUpdates) => {
         setProfile((current) =>
@@ -614,7 +616,7 @@ function ScreenShell({
   subtitle,
   children,
   rightAction,
-  showAppName = true,
+  showAppName = false,
 }: {
   title: string;
   subtitle?: string;
@@ -1092,11 +1094,35 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
     .filter(({ status }) => status.isWarning);
   const passedBudgetWarning = budgetWarnings.find(({ status }) => status.isPassed);
   const firstBudgetWarning = passedBudgetWarning ?? budgetWarnings[0];
+  const unreadNotificationCount = alertsRead ? 0 : budgetWarnings.length;
   const budgetAlertMessage = firstBudgetWarning
     ? firstBudgetWarning.status.isPassed
       ? `${firstBudgetWarning.budget.name} has passed its budget by ${money(firstBudgetWarning.status.overBy)}.`
       : `${firstBudgetWarning.budget.name} is close to its ${firstBudgetWarning.budget.threshold}% alert threshold.`
     : 'No active budget warnings right now.';
+  const notificationRows =
+    budgetWarnings.length > 0
+      ? budgetWarnings.map(({ budget, status }) => ({
+          id: budget.id,
+          title: status.isPassed ? `${budget.name} passed` : `${budget.name} warning`,
+          body: status.isPassed
+            ? `Passed by ${money(status.overBy)}`
+            : `Reached ${Math.round(status.progress * 100)}% of ${money(budget.limit)}`,
+          urgent: status.isPassed,
+        }))
+      : [
+          {
+            id: 'all-clear',
+            title: 'All clear',
+            body: 'No active budget warnings right now.',
+            urgent: false,
+          },
+        ];
+
+  function closeNotifications() {
+    markAlertsRead();
+    setShowAlerts(false);
+  }
 
   return (
     <ScreenShell
@@ -1109,10 +1135,20 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
             label="View notifications"
             onPress={() => {
               setShowAlerts((current) => !current);
-              markAlertsRead();
             }}
             active={!alertsRead && budgetWarnings.length > 0}
-            icon={<Bell color={colors.primary} size={22} />}
+            icon={
+              <View style={styles.notificationBellWrap}>
+                <Bell color={colors.primary} size={22} />
+                {unreadNotificationCount > 0 ? (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            }
           />
           <Pressable accessibilityRole="button" accessibilityLabel="Edit profile" onPress={() => setProfileVisible(true)}>
             <AvatarDisplay profile={profile} />
@@ -1239,7 +1275,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
           )}
         </GlassCard>
       </ScrollView>
-      <Modal transparent visible={showAlerts} animationType="fade" onRequestClose={() => setShowAlerts(false)}>
+      <Modal transparent visible={showAlerts} animationType="fade" onRequestClose={closeNotifications}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.rowBetween}>
@@ -1257,26 +1293,31 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
                     : 'All clear'}
                 </Text>
               </View>
-              <Pressable accessibilityRole="button" onPress={() => setShowAlerts(false)}>
+              <Pressable accessibilityRole="button" onPress={closeNotifications}>
                 <X color={colors.muted} size={22} />
               </Pressable>
             </View>
             <Text style={[styles.bodyText, styles.notificationMessage]}>{budgetAlertMessage}</Text>
-            {budgetWarnings.length > 1 ? (
-              <View style={styles.notificationList}>
-                {budgetWarnings.map(({ budget, status }) => (
-                  <View key={budget.id} style={styles.notificationItem}>
-                    <Text style={styles.notificationTitle}>{budget.name}</Text>
-                    <Text style={status.isPassed ? styles.warningText : styles.mutedText}>
-                      {status.isPassed
-                        ? `Passed by ${money(status.overBy)}`
-                        : `Reached ${Math.round(status.progress * 100)}% of limit`}
-                    </Text>
+            <View style={styles.notificationList}>
+              {notificationRows.map((notification) => (
+                <View
+                  key={notification.id}
+                  style={[styles.notificationItem, notification.urgent && styles.notificationItemUrgent]}
+                >
+                  <View style={[styles.notificationStatusDot, notification.urgent && styles.notificationStatusDotUrgent]} />
+                  <View style={styles.notificationContent}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.notificationTitle}>{notification.title}</Text>
+                      {unreadNotificationCount > 0 && notification.id !== 'all-clear' ? (
+                        <Text style={styles.unreadLabel}>Unread</Text>
+                      ) : null}
+                    </View>
+                    <Text style={notification.urgent ? styles.warningText : styles.mutedText}>{notification.body}</Text>
                   </View>
-                ))}
-              </View>
-            ) : null}
-            <PrimaryButton label="Got it" onPress={() => setShowAlerts(false)} />
+                </View>
+              ))}
+            </View>
+            <PrimaryButton label="Got it" onPress={closeNotifications} />
           </View>
         </View>
       </Modal>
@@ -2451,18 +2492,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
   },
-  editHint: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  editedText: {
-    color: colors.soft,
-    fontSize: 12,
-    fontWeight: '800',
-    marginTop: 4,
-  },
   goodText: {
     color: colors.primary,
   },
@@ -2587,12 +2616,48 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 8,
   },
+  notificationBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.warning,
+    borderColor: '#121c31',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: -10,
+    top: -10,
+  },
+  notificationBadgeText: {
+    color: '#2a2104',
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 14,
+  },
+  notificationBellWrap: {
+    alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 24,
+  },
+  notificationContent: {
+    flex: 1,
+    minWidth: 0,
+  },
   notificationItem: {
+    alignItems: 'flex-start',
     backgroundColor: 'rgba(218, 226, 253, 0.06)',
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
     padding: 12,
+  },
+  notificationItemUrgent: {
+    backgroundColor: 'rgba(67, 55, 22, 0.66)',
+    borderColor: 'rgba(249, 189, 34, 0.42)',
   },
   notificationList: {
     gap: 10,
@@ -2604,8 +2669,19 @@ const styles = StyleSheet.create({
   },
   notificationTitle: {
     color: colors.text,
+    flex: 1,
     fontSize: 15,
     fontWeight: '800',
+  },
+  notificationStatusDot: {
+    backgroundColor: colors.primary,
+    borderRadius: 5,
+    height: 10,
+    marginTop: 5,
+    width: 10,
+  },
+  notificationStatusDotUrgent: {
+    backgroundColor: colors.warning,
   },
   percentText: {
     color: colors.primary,
@@ -2969,6 +3045,13 @@ const styles = StyleSheet.create({
   twoColumn: {
     flexDirection: 'row',
     gap: 12,
+  },
+  unreadLabel: {
+    color: colors.warning,
+    fontSize: 11,
+    fontWeight: '900',
+    marginLeft: 10,
+    textTransform: 'uppercase',
   },
   warningText: {
     color: colors.warning,
