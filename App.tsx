@@ -1045,7 +1045,7 @@ function AddScreen({ navigation }: ScreenProps<'Add'>) {
           />
           <Text style={styles.inputLabel}>Description</Text>
           <TextInput
-            placeholder={type === 'income' ? 'Salary, gift, allowance' : 'Groceries, transport, rent'}
+            placeholder={type === 'income' ? 'Income description' : 'Expense description'}
             placeholderTextColor={colors.soft}
             value={description}
             onChangeText={setDescription}

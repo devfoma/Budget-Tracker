@@ -388,7 +388,7 @@ Stores the local user profile information for the device.
 | id | text | Primary key and unique generated local user ID |
 | full_name | text | User's display name |
 | email | text | Optional user email address |
-| currency | text | Preferred currency, default NGN |
+| currency | text | Preferred currency, default ₦ |
 | monthly_income_estimate | numeric | Optional estimated monthly income |
 | avatar_url | text | Optional profile image URL |
 | created_at | timestamp | Profile creation date |
