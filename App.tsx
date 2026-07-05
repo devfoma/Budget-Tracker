@@ -202,6 +202,17 @@ function getInitials(name: string) {
   return initials.toUpperCase() || 'U';
 }
 
+function getCompactCategoryName(category: string) {
+  const compactNames: Record<string, string> = {
+    Transport: 'Transp.',
+    Shopping: 'Shop',
+    Savings: 'Save',
+    Business: 'Biz',
+    Allowance: 'Allow.',
+  };
+  return compactNames[category] ?? category;
+}
+
 function normalizeProfile(profile: Partial<Profile> | null): Profile {
   const fullName = profile?.fullName?.trim() ?? '';
   return {
@@ -686,12 +697,16 @@ function IconButton({
   label,
   onPress,
   active = false,
+  badge,
 }: {
   icon: ReactNode;
   label: string;
   onPress: () => void;
   active?: boolean;
+  badge?: number;
 }) {
+  const hasBadge = typeof badge === 'number' && badge > 0;
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -703,6 +718,11 @@ function IconButton({
       style={({ pressed }) => [styles.iconButton, active && styles.iconButtonActive, pressed && styles.pressed]}
     >
       {icon}
+      {hasBadge ? (
+        <View style={styles.notificationBadge}>
+          <Text style={styles.notificationBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -893,12 +913,14 @@ function MiniStat({ label, value, tone = 'default' }: { label: string; value: st
   );
 }
 
-function CategoryBadge({ category }: { category: string }) {
+function CategoryBadge({ category, compact = false }: { category: string; compact?: boolean }) {
   const Icon = getCategoryIcon(category);
   return (
-    <View style={styles.categoryBadge}>
-      <Icon color={colors.primary} size={18} />
-      <Text style={styles.categoryBadgeText}>{category}</Text>
+    <View style={[styles.categoryBadge, compact && styles.categoryBadgeCompact]}>
+      <Icon color={colors.primary} size={compact ? 15 : 18} />
+      <Text numberOfLines={1} style={[styles.categoryBadgeText, compact && styles.categoryBadgeTextCompact]}>
+        {compact ? getCompactCategoryName(category) : category}
+      </Text>
     </View>
   );
 }
@@ -1137,18 +1159,8 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
               setShowAlerts((current) => !current);
             }}
             active={!alertsRead && budgetWarnings.length > 0}
-            icon={
-              <View style={styles.notificationBellWrap}>
-                <Bell color={colors.primary} size={22} />
-                {unreadNotificationCount > 0 ? (
-                  <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>
-                      {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            }
+            badge={unreadNotificationCount}
+            icon={<Bell color={colors.primary} size={22} />}
           />
           <Pressable accessibilityRole="button" accessibilityLabel="Edit profile" onPress={() => setProfileVisible(true)}>
             <AvatarDisplay profile={profile} />
@@ -1190,9 +1202,16 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
                 <Text style={styles.bodyText}>Add an expense to see category totals.</Text>
               ) : (
                 spendingCategories.slice(0, 3).map((item) => (
-                  <View key={item.category} style={styles.rowBetween}>
-                    <CategoryBadge category={item.category} />
-                    <Text style={styles.amountSmall}>{money(item.amount)}</Text>
+                  <View key={item.category} style={styles.dashboardSpendingRow}>
+                    <CategoryBadge category={item.category} compact />
+                    <Text
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.72}
+                      numberOfLines={1}
+                      style={styles.dashboardSpendingAmount}
+                    >
+                      {money(item.amount)}
+                    </Text>
                   </View>
                 ))
               )}
@@ -1308,9 +1327,6 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
                   <View style={styles.notificationContent}>
                     <View style={styles.rowBetween}>
                       <Text style={styles.notificationTitle}>{notification.title}</Text>
-                      {unreadNotificationCount > 0 && notification.id !== 'all-clear' ? (
-                        <Text style={styles.unreadLabel}>Unread</Text>
-                      ) : null}
                     </View>
                     <Text style={notification.urgent ? styles.warningText : styles.mutedText}>{notification.body}</Text>
                   </View>
@@ -2355,10 +2371,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  categoryBadgeCompact: {
+    flexShrink: 1,
+    gap: 5,
+    maxWidth: 82,
+    paddingHorizontal: 7,
+    paddingVertical: 7,
+  },
   categoryBadgeText: {
     color: colors.text,
     fontSize: 13,
     fontWeight: '700',
+  },
+  categoryBadgeTextCompact: {
+    flexShrink: 1,
+    fontSize: 12,
   },
   categoryList: {
     gap: 12,
@@ -2385,6 +2412,22 @@ const styles = StyleSheet.create({
   },
   dashboardActionRow: {
     marginTop: 14,
+  },
+  dashboardSpendingAmount: {
+    color: colors.text,
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    maxWidth: 82,
+    minWidth: 56,
+    textAlign: 'right',
+  },
+  dashboardSpendingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'space-between',
+    minWidth: 0,
   },
   donutAmount: {
     color: colors.text,
@@ -2517,6 +2560,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 44,
     justifyContent: 'center',
+    position: 'relative',
     width: 44,
   },
   iconButtonActive: {
@@ -2619,27 +2663,26 @@ const styles = StyleSheet.create({
   notificationBadge: {
     alignItems: 'center',
     backgroundColor: colors.warning,
-    borderColor: '#121c31',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    minWidth: 18,
-    paddingHorizontal: 4,
+    borderColor: '#07111f',
+    borderRadius: 11,
+    borderWidth: 2,
+    elevation: 5,
+    minWidth: 21,
+    paddingHorizontal: 5,
     position: 'absolute',
-    right: -10,
-    top: -10,
+    right: -7,
+    shadowColor: '#000',
+    shadowOffset: { height: 4, width: 0 },
+    shadowOpacity: 0.26,
+    shadowRadius: 8,
+    top: -7,
+    zIndex: 3,
   },
   notificationBadgeText: {
-    color: '#2a2104',
-    fontSize: 10,
+    color: '#201700',
+    fontSize: 11,
     fontWeight: '900',
-    lineHeight: 14,
-  },
-  notificationBellWrap: {
-    alignItems: 'center',
-    height: 24,
-    justifyContent: 'center',
-    position: 'relative',
-    width: 24,
+    lineHeight: 15,
   },
   notificationContent: {
     flex: 1,
@@ -3045,13 +3088,6 @@ const styles = StyleSheet.create({
   twoColumn: {
     flexDirection: 'row',
     gap: 12,
-  },
-  unreadLabel: {
-    color: colors.warning,
-    fontSize: 11,
-    fontWeight: '900',
-    marginLeft: 10,
-    textTransform: 'uppercase',
   },
   warningText: {
     color: colors.warning,
