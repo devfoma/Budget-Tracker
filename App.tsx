@@ -57,15 +57,16 @@ import {
   Easing,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
+  StyleProp,
   Text,
   TextInput,
   View,
+  ViewStyle,
 } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type RootTabParamList = {
   Dashboard: undefined;
@@ -111,7 +112,6 @@ type AppData = {
   alertsRead: boolean;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
   addBudget: (budget: Omit<Budget, 'id'>) => void;
-  clearDemoData: () => void;
   toggleAppLock: () => void;
   markAlertsRead: () => void;
 };
@@ -146,50 +146,15 @@ const expenseCategories = ['Food', 'Transport', 'School', 'Bills', 'Health', 'Sh
 const incomeCategories = ['Salary', 'Allowance', 'Gift', 'Business'];
 const methods = ['Cash', 'Transfer', 'Card', 'POS'];
 
-const seedTransactions: Transaction[] = [
-  {
-    id: 'txn-1',
-    type: 'expense',
-    amount: 8500,
-    category: 'Food',
-    description: 'Groceries',
-    method: 'Card',
-    date: '2026-07-03T08:45:00.000Z',
-  },
-  {
-    id: 'txn-2',
-    type: 'income',
-    amount: 300000,
-    category: 'Salary',
-    description: 'Monthly salary',
-    method: 'Transfer',
-    date: '2026-07-02T16:00:00.000Z',
-  },
-  {
-    id: 'txn-3',
-    type: 'expense',
-    amount: 120000,
-    category: 'Bills',
-    description: 'Rent payment',
-    method: 'Transfer',
-    date: '2026-07-01T10:00:00.000Z',
-  },
-  {
-    id: 'txn-4',
-    type: 'expense',
-    amount: 4500,
-    category: 'Transport',
-    description: 'Bus fare',
-    method: 'Cash',
-    date: '2026-07-01T07:35:00.000Z',
-  },
-];
+const defaultProfile: Profile = {
+  id: uid('user'),
+  fullName: 'User',
+  currency: 'NGN',
+  appLockEnabled: true,
+};
 
-const seedBudgets: Budget[] = [
-  { id: 'budget-1', name: 'Food & Groceries', category: 'Food', limit: 50000, threshold: 80 },
-  { id: 'budget-2', name: 'Transport', category: 'Transport', limit: 30000, threshold: 75 },
-  { id: 'budget-3', name: 'Bills', category: 'Bills', limit: 150000, threshold: 85 },
-];
+const legacyDemoTransactionIds = new Set(['txn-1', 'txn-2', 'txn-3', 'txn-4']);
+const legacyDemoBudgetIds = new Set(['budget-1', 'budget-2', 'budget-3']);
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -197,6 +162,125 @@ function uid(prefix: string) {
 
 function formatMoney(amount: number) {
   return `NGN ${Math.round(amount).toLocaleString('en-NG')}`;
+}
+
+function sumTransactions(transactions: Transaction[], type: TransactionType) {
+  return transactions
+    .filter((transaction) => transaction.type === type)
+    .reduce((total, transaction) => total + transaction.amount, 0);
+}
+
+function getInitials(name: string) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('');
+  return initials.toUpperCase() || 'U';
+}
+
+function getRangeDays(range: ReportRange) {
+  switch (range) {
+    case 'Week':
+      return 7;
+    case 'Year':
+      return 365;
+    case 'Month':
+    default:
+      return 30;
+  }
+}
+
+function getTransactionsInRange(transactions: Transaction[], range: ReportRange, periodOffset = 0) {
+  const rangeMs = getRangeDays(range) * 24 * 60 * 60 * 1000;
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const endTime = end.getTime() - rangeMs * periodOffset;
+  const startTime = endTime - rangeMs;
+
+  return transactions.filter((transaction) => {
+    const time = new Date(transaction.date).getTime();
+    return time > startTime && time <= endTime;
+  });
+}
+
+function getSavingsRate(income: number, expenses: number) {
+  if (income <= 0) {
+    return 0;
+  }
+  return Math.round((Math.max(0, income - expenses) / income) * 100);
+}
+
+function getExpenseChange(currentExpenses: number, previousExpenses: number) {
+  if (previousExpenses <= 0) {
+    return currentExpenses > 0 ? 100 : 0;
+  }
+  return Math.round(((currentExpenses - previousExpenses) / previousExpenses) * 100);
+}
+
+function formatChange(change: number) {
+  return `${change > 0 ? '+' : ''}${change}%`;
+}
+
+function getAverageDailyExpense(transactions: Transaction[], expenses: number) {
+  if (transactions.length === 0 || expenses <= 0) {
+    return 0;
+  }
+  const times = transactions.map((transaction) => new Date(transaction.date).getTime());
+  const first = Math.min(...times);
+  const last = Math.max(...times);
+  const days = Math.max(1, Math.ceil((last - first) / (24 * 60 * 60 * 1000)) + 1);
+  return expenses / days;
+}
+
+function getFinancialHealthLabel(income: number, expenses: number, budgets: Budget[]) {
+  if (income <= 0 && expenses <= 0 && budgets.length === 0) {
+    return 'Financial health: waiting for data';
+  }
+  if (income > 0 && expenses <= income) {
+    return 'Financial health: steady';
+  }
+  if (expenses > income) {
+    return 'Financial health: needs attention';
+  }
+  return 'Financial health: building history';
+}
+
+function buildTrendPoints(transactions: Transaction[], range: ReportRange) {
+  const buckets = range === 'Week' ? 7 : range === 'Month' ? 6 : 12;
+  const bucketTotals = Array.from({ length: buckets }, () => 0);
+  const rangeMs = getRangeDays(range) * 24 * 60 * 60 * 1000;
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+  const endTime = now.getTime();
+  const startTime = endTime - rangeMs;
+  const bucketMs = rangeMs / buckets;
+
+  transactions
+    .filter((transaction) => transaction.type === 'expense')
+    .forEach((transaction) => {
+      const time = new Date(transaction.date).getTime();
+      const index = Math.min(buckets - 1, Math.max(0, Math.floor((time - startTime) / bucketMs)));
+      bucketTotals[index] += transaction.amount;
+    });
+
+  const max = Math.max(...bucketTotals);
+  if (max <= 0) {
+    return Array.from({ length: buckets }, (_, index) => {
+      const x = 8 + (284 / Math.max(1, buckets - 1)) * index;
+      return `${Math.round(x)},124`;
+    }).join(' ');
+  }
+
+  return bucketTotals
+    .map((amount, index) => {
+      const x = 8 + (284 / Math.max(1, buckets - 1)) * index;
+      const y = 132 - (amount / max) * 96;
+      return `${Math.round(x)},${Math.round(y)}`;
+    })
+    .join(' ');
 }
 
 function getCategoryIcon(category: string) {
@@ -238,14 +322,9 @@ function useAppData() {
 
 function AppDataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
-  const [profile, setProfile] = useState<Profile>({
-    id: uid('user'),
-    fullName: 'Alex',
-    currency: 'NGN',
-    appLockEnabled: true,
-  });
-  const [transactions, setTransactions] = useState<Transaction[]>(seedTransactions);
-  const [budgets, setBudgets] = useState<Budget[]>(seedBudgets);
+  const [profile, setProfile] = useState<Profile>(defaultProfile);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [alertsRead, setAlertsRead] = useState(false);
 
   useEffect(() => {
@@ -259,21 +338,20 @@ function AppDataProvider({ children }: { children: ReactNode }) {
       if (storedProfile) {
         setProfile(JSON.parse(storedProfile) as Profile);
       } else {
-        const freshProfile = {
-          id: uid('user'),
-          fullName: 'Alex',
-          currency: 'NGN',
-          appLockEnabled: true,
-        };
+        const freshProfile = { ...defaultProfile, id: uid('user') };
         setProfile(freshProfile);
         await AsyncStorage.setItem(storageKeys.profile, JSON.stringify(freshProfile));
       }
 
       if (storedTransactions) {
-        setTransactions(JSON.parse(storedTransactions) as Transaction[]);
+        setTransactions(
+          (JSON.parse(storedTransactions) as Transaction[]).filter(
+            (transaction) => !legacyDemoTransactionIds.has(transaction.id),
+          ),
+        );
       }
       if (storedBudgets) {
-        setBudgets(JSON.parse(storedBudgets) as Budget[]);
+        setBudgets((JSON.parse(storedBudgets) as Budget[]).filter((budget) => !legacyDemoBudgetIds.has(budget.id)));
       }
       setReady(true);
     }
@@ -319,11 +397,6 @@ function AppDataProvider({ children }: { children: ReactNode }) {
       addBudget: (budget) => {
         setBudgets((current) => [{ id: uid('budget'), ...budget }, ...current]);
       },
-      clearDemoData: () => {
-        setTransactions(seedTransactions);
-        setBudgets(seedBudgets);
-        setAlertsRead(false);
-      },
       toggleAppLock: () => {
         setProfile((current) => ({ ...current, appLockEnabled: !current.appLockEnabled }));
       },
@@ -349,12 +422,8 @@ function AppDataProvider({ children }: { children: ReactNode }) {
 
 function useSummary() {
   const { transactions, budgets } = useAppData();
-  const income = transactions
-    .filter((transaction) => transaction.type === 'income')
-    .reduce((total, transaction) => total + transaction.amount, 0);
-  const expenses = transactions
-    .filter((transaction) => transaction.type === 'expense')
-    .reduce((total, transaction) => total + transaction.amount, 0);
+  const income = sumTransactions(transactions, 'income');
+  const expenses = sumTransactions(transactions, 'expense');
   const balance = income - expenses;
   const spentByCategory = expenseCategories.map((category) => ({
     category,
@@ -399,6 +468,7 @@ function ScreenShell({
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(18)).current;
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     Animated.parallel([
@@ -419,8 +489,8 @@ function ScreenShell({
 
   return (
     <GradientShell>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.header}>
+      <View style={styles.safe}>
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <View>
             <Text style={styles.appName}>Budget Tracker</Text>
             <Text style={styles.screenTitle}>{title}</Text>
@@ -431,15 +501,23 @@ function ScreenShell({
         <Animated.View style={[styles.animatedBody, { opacity, transform: [{ translateY }] }]}>
           {children}
         </Animated.View>
-      </SafeAreaView>
+      </View>
     </GradientShell>
   );
 }
 
-function GlassCard({ children, tone = 'default' }: { children: ReactNode; tone?: 'default' | 'accent' | 'warning' }) {
-  const style = tone === 'accent' ? styles.cardAccent : tone === 'warning' ? styles.cardWarning : styles.card;
+function GlassCard({
+  children,
+  tone = 'default',
+  style,
+}: {
+  children: ReactNode;
+  tone?: 'default' | 'accent' | 'warning';
+  style?: StyleProp<ViewStyle>;
+}) {
+  const baseStyle = tone === 'accent' ? styles.cardAccent : tone === 'warning' ? styles.cardWarning : styles.card;
   return (
-    <BlurView intensity={26} tint="dark" style={style}>
+    <BlurView intensity={24} tint="dark" style={[baseStyle, style]}>
       {children}
     </BlurView>
   );
@@ -554,7 +632,7 @@ function CategoryBadge({ category }: { category: string }) {
 }
 
 function ProgressBar({ progress, warning = false }: { progress: number; warning?: boolean }) {
-  const width = `${Math.min(100, Math.max(4, progress * 100))}%` as DimensionValue;
+  const width = `${progress <= 0 ? 0 : Math.min(100, Math.max(4, progress * 100))}%` as DimensionValue;
   return (
     <View style={styles.progressTrack}>
       <View style={[styles.progressFill, warning && styles.progressWarning, { width }]} />
@@ -596,16 +674,9 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
   const { profile, transactions, budgets, alertsRead, markAlertsRead } = useAppData();
   const { income, expenses, balance, spentByCategory } = useSummary();
   const [showAlerts, setShowAlerts] = useState(false);
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.08, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ]),
-    ).start();
-  }, [pulse]);
+  const spendingCategories = spentByCategory.filter((item) => item.amount > 0);
+  const savingsRate = getSavingsRate(income, expenses);
+  const dailyAverage = getAverageDailyExpense(transactions, expenses);
 
   const budgetWarnings = budgets.filter((budget) => {
     const spent = transactions
@@ -630,7 +701,7 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
             icon={<Bell color={colors.primary} size={22} />}
           />
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>A</Text>
+            <Text style={styles.avatarText}>{getInitials(profile.fullName)}</Text>
           </View>
         </View>
       }
@@ -669,28 +740,29 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
         </GlassCard>
 
         <View style={styles.twoColumn}>
-          <GlassCard>
+          <GlassCard style={styles.flexCard}>
             <Text style={styles.cardTitle}>Spending</Text>
             <View style={styles.categoryList}>
-              {spentByCategory
-                .filter((item) => item.amount > 0)
-                .slice(0, 3)
-                .map((item) => (
+              {spendingCategories.length === 0 ? (
+                <Text style={styles.bodyText}>Add an expense to see category totals.</Text>
+              ) : (
+                spendingCategories.slice(0, 3).map((item) => (
                   <View key={item.category} style={styles.rowBetween}>
                     <CategoryBadge category={item.category} />
                     <Text style={styles.amountSmall}>{formatMoney(item.amount)}</Text>
                   </View>
-                ))}
+                ))
+              )}
             </View>
           </GlassCard>
           <View style={styles.sideStack}>
             <GlassCard>
               <Text style={styles.kicker}>Daily avg</Text>
-              <Text style={styles.sideValue}>{formatMoney(Math.max(0, expenses / 7))}</Text>
+              <Text style={styles.sideValue}>{formatMoney(dailyAverage)}</Text>
             </GlassCard>
             <GlassCard tone="accent">
               <Text style={styles.kicker}>Savings rate</Text>
-              <Text style={styles.sideValue}>+12%</Text>
+              <Text style={styles.sideValue}>{savingsRate}%</Text>
             </GlassCard>
           </View>
         </View>
@@ -701,24 +773,34 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
             <Text style={styles.linkText}>View all</Text>
           </Pressable>
         </View>
-        {budgets.slice(0, 2).map((budget) => {
-          const spent = transactions
-            .filter((transaction) => transaction.type === 'expense' && transaction.category === budget.category)
-            .reduce((total, transaction) => total + transaction.amount, 0);
-          const progress = spent / budget.limit;
-          return (
-            <GlassCard key={budget.id}>
-              <View style={styles.rowBetween}>
-                <CategoryBadge category={budget.category} />
-                <Text style={styles.amountSmall}>
-                  {formatMoney(spent)} / {formatMoney(budget.limit)}
-                </Text>
-              </View>
-              <ProgressBar progress={progress} warning={progress >= budget.threshold / 100} />
-              <Text style={styles.mutedText}>{Math.round(progress * 100)}% used</Text>
-            </GlassCard>
-          );
-        })}
+        {budgets.length === 0 ? (
+          <GlassCard>
+            <View style={styles.emptyState}>
+              <PiggyBank color={colors.soft} size={28} />
+              <Text style={styles.emptyTitle}>No budgets yet</Text>
+              <Text style={styles.bodyText}>Create a budget to start tracking planned spending.</Text>
+            </View>
+          </GlassCard>
+        ) : (
+          budgets.slice(0, 2).map((budget) => {
+            const spent = transactions
+              .filter((transaction) => transaction.type === 'expense' && transaction.category === budget.category)
+              .reduce((total, transaction) => total + transaction.amount, 0);
+            const progress = spent / budget.limit;
+            return (
+              <GlassCard key={budget.id}>
+                <View style={styles.rowBetween}>
+                  <CategoryBadge category={budget.category} />
+                  <Text style={styles.amountSmall}>
+                    {formatMoney(spent)} / {formatMoney(budget.limit)}
+                  </Text>
+                </View>
+                <ProgressBar progress={progress} warning={progress >= budget.threshold / 100} />
+                <Text style={styles.mutedText}>{Math.round(progress * 100)}% used</Text>
+              </GlassCard>
+            );
+          })
+        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent activity</Text>
@@ -727,24 +809,19 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
           </Pressable>
         </View>
         <GlassCard>
-          {transactions.slice(0, 3).map((transaction) => (
-            <TransactionRow key={transaction.id} transaction={transaction} />
-          ))}
+          {transactions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <ReceiptText color={colors.soft} size={28} />
+              <Text style={styles.emptyTitle}>No transactions yet</Text>
+              <Text style={styles.bodyText}>Add income or expenses to build your financial snapshot.</Text>
+            </View>
+          ) : (
+            transactions.slice(0, 3).map((transaction) => (
+              <TransactionRow key={transaction.id} transaction={transaction} />
+            ))
+          )}
         </GlassCard>
       </ScrollView>
-      <Animated.View style={[styles.floatingAdd, { transform: [{ scale: pulse }] }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add transaction"
-          onPress={() => {
-            hapticTap();
-            navigation.navigate('Add');
-          }}
-          style={styles.floatingAddButton}
-        >
-          <Plus color="#06251a" size={30} />
-        </Pressable>
-      </Animated.View>
     </ScreenShell>
   );
 }
@@ -1063,10 +1140,25 @@ function BudgetsScreen() {
 function ReportsScreen() {
   const { transactions, budgets } = useAppData();
   const [range, setRange] = useState<ReportRange>('Month');
-  const { income, expenses, balance, topCategory, spentByCategory } = useSummary();
+  const rangeTransactions = useMemo(() => getTransactionsInRange(transactions, range), [range, transactions]);
+  const previousRangeTransactions = useMemo(() => getTransactionsInRange(transactions, range, 1), [range, transactions]);
+  const income = sumTransactions(rangeTransactions, 'income');
+  const expenses = sumTransactions(rangeTransactions, 'expense');
+  const previousExpenses = sumTransactions(previousRangeTransactions, 'expense');
+  const balance = income - expenses;
   const savings = Math.max(0, balance);
+  const savingsRate = getSavingsRate(income, expenses);
+  const expenseChange = getExpenseChange(expenses, previousExpenses);
+  const spentByCategory = expenseCategories.map((category) => ({
+    category,
+    amount: rangeTransactions
+      .filter((transaction) => transaction.type === 'expense' && transaction.category === category)
+      .reduce((total, transaction) => total + transaction.amount, 0),
+  }));
+  const topCategory = [...spentByCategory].filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount)[0];
   const totalSpend = Math.max(1, expenses);
-  const trendPoints = range === 'Week' ? '8,122 62,98 116,112 176,76 238,68 292,38' : '8,114 72,90 132,98 190,64 246,52 292,36';
+  const trendPoints = buildTrendPoints(rangeTransactions, range);
+  const healthLabel = getFinancialHealthLabel(income, expenses, budgets);
 
   return (
     <ScreenShell title="Reports" subtitle="Simple insights from local records.">
@@ -1085,12 +1177,12 @@ function ReportsScreen() {
         </View>
 
         <View style={styles.twoColumn}>
-          <GlassCard>
+          <GlassCard style={styles.flexCard}>
             <Text style={styles.kicker}>Total savings</Text>
             <Text style={styles.sideValue}>{formatMoney(savings)}</Text>
-            <Text style={styles.goodText}>+12.5%</Text>
+            <Text style={styles.goodText}>{savingsRate}% saved</Text>
           </GlassCard>
-          <GlassCard tone="warning">
+          <GlassCard tone="warning" style={styles.flexCard}>
             <Text style={styles.kicker}>Top category</Text>
             <Text style={styles.sideValue}>{topCategory?.category ?? 'None'}</Text>
             <Text style={styles.mutedText}>{formatMoney(topCategory?.amount ?? 0)}</Text>
@@ -1110,7 +1202,11 @@ function ReportsScreen() {
                 strokeWidth="24"
                 fill="none"
                 strokeLinecap="round"
-                strokeDasharray={`${Math.min(340, Math.max(40, ((topCategory?.amount ?? 0) / totalSpend) * 360))} 360`}
+                strokeDasharray={
+                  topCategory
+                    ? `${Math.min(340, Math.max(40, (topCategory.amount / totalSpend) * 360))} 360`
+                    : '0 360'
+                }
                 transform="rotate(-90 85 85)"
               />
             </Svg>
@@ -1128,12 +1224,21 @@ function ReportsScreen() {
                 <Text style={styles.amountSmall}>{Math.round((item.amount / totalSpend) * 100)}%</Text>
               </View>
             ))}
+          {expenses === 0 ? (
+            <View style={styles.emptyState}>
+              <BarChart3 color={colors.soft} size={28} />
+              <Text style={styles.emptyTitle}>No spending in this range</Text>
+              <Text style={styles.bodyText}>Expenses added by the user will appear here.</Text>
+            </View>
+          ) : null}
         </GlassCard>
 
         <GlassCard>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>Spending trend</Text>
-            <Text style={styles.goodText}>+4% vs last {range.toLowerCase()}</Text>
+            <Text style={expenseChange > 0 ? styles.badText : styles.goodText}>
+              {formatChange(expenseChange)} vs last {range.toLowerCase()}
+            </Text>
           </View>
           <Svg height="150" width="100%" viewBox="0 0 300 150">
             <Polyline
@@ -1150,7 +1255,7 @@ function ReportsScreen() {
         <GlassCard tone="accent">
           <View style={styles.rowSmall}>
             <Sparkles color={colors.primary} size={26} />
-            <Text style={styles.cardTitle}>Financial health: steady</Text>
+            <Text style={styles.cardTitle}>{healthLabel}</Text>
           </View>
           <Text style={styles.bodyText}>
             Income is {formatMoney(income)} and your active budgets cover {budgets.length} spending areas. Keep recording
@@ -1263,7 +1368,7 @@ function TabIcon({
     case 'Activity':
       return <ReceiptText color={iconColor} size={iconSize} />;
     case 'Add':
-      return <Plus color={focused ? '#06251a' : colors.primary} size={iconSize} />;
+      return <Plus color="#06251a" size={iconSize} />;
     case 'Budgets':
       return <PiggyBank color={iconColor} size={iconSize} />;
     case 'Reports':
@@ -1320,20 +1425,25 @@ export default function App() {
 const styles = StyleSheet.create({
   addIconWrap: {
     backgroundColor: colors.primary,
-    borderColor: 'rgba(78, 222, 163, 0.5)',
-    borderRadius: 25,
-    height: 50,
-    marginTop: -18,
-    width: 50,
+    borderColor: 'rgba(6, 37, 26, 0.35)',
+    borderRadius: 24,
+    borderWidth: 1,
+    height: 48,
+    marginTop: -12,
+    shadowColor: colors.primary,
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
+    width: 48,
   },
   addTabItem: {
-    height: 72,
+    height: 66,
   },
   amountInput: {
     color: colors.text,
-    fontSize: 44,
+    fontSize: 38,
     fontWeight: '800',
-    marginBottom: 18,
+    marginBottom: 12,
     paddingVertical: 6,
   },
   amountSmall: {
@@ -1371,7 +1481,7 @@ const styles = StyleSheet.create({
   },
   balance: {
     color: colors.primary,
-    fontSize: 40,
+    fontSize: 34,
     fontWeight: '900',
     marginTop: 8,
   },
@@ -1382,41 +1492,45 @@ const styles = StyleSheet.create({
   },
   budgetName: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
-    marginTop: 14,
+    marginTop: 12,
   },
   card: {
     backgroundColor: 'rgba(20, 30, 52, 0.72)',
     borderColor: colors.border,
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
-    marginBottom: 14,
+    marginBottom: 12,
     overflow: 'hidden',
-    padding: 18,
+    padding: 14,
   },
   cardAccent: {
     backgroundColor: 'rgba(23, 65, 58, 0.58)',
     borderColor: 'rgba(78, 222, 163, 0.34)',
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
-    marginBottom: 14,
+    marginBottom: 12,
     overflow: 'hidden',
-    padding: 18,
+    padding: 14,
+  },
+  flexCard: {
+    flex: 1,
+    minWidth: 0,
   },
   cardTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
   },
   cardWarning: {
     backgroundColor: 'rgba(67, 55, 22, 0.66)',
     borderColor: 'rgba(249, 189, 34, 0.42)',
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
-    marginBottom: 14,
+    marginBottom: 12,
     overflow: 'hidden',
-    padding: 18,
+    padding: 14,
   },
   categoryBadge: {
     alignItems: 'center',
@@ -1443,12 +1557,12 @@ const styles = StyleSheet.create({
   createBudgetCard: {
     alignItems: 'center',
     borderColor: 'rgba(218, 226, 253, 0.18)',
-    borderRadius: 24,
+    borderRadius: 18,
     borderStyle: 'dashed',
     borderWidth: 1.5,
     gap: 10,
-    marginBottom: 28,
-    padding: 26,
+    marginBottom: 120,
+    padding: 22,
   },
   createBudgetText: {
     color: colors.muted,
@@ -1481,34 +1595,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
   },
-  floatingAdd: {
-    bottom: 22,
-    position: 'absolute',
-    right: 24,
-  },
-  floatingAddButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 34,
-    height: 68,
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { height: 14, width: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 22,
-    width: 68,
-  },
   goodText: {
     color: colors.primary,
   },
   header: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderBottomColor: 'rgba(218, 226, 253, 0.08)',
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
   },
   headerActions: {
     alignItems: 'center',
@@ -1566,10 +1663,10 @@ const styles = StyleSheet.create({
   miniStat: {
     backgroundColor: 'rgba(9, 18, 35, 0.44)',
     borderColor: 'rgba(218, 226, 253, 0.08)',
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     flex: 1,
-    padding: 14,
+    padding: 12,
   },
   miniStatValue: {
     color: colors.text,
@@ -1690,12 +1787,12 @@ const styles = StyleSheet.create({
   },
   screenTitle: {
     color: colors.text,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '900',
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 116,
+    padding: 16,
+    paddingBottom: 180,
   },
   searchBox: {
     alignItems: 'center',
@@ -1721,7 +1818,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 23,
+    fontSize: 21,
     fontWeight: '900',
   },
   segment: {
@@ -1757,11 +1854,11 @@ const styles = StyleSheet.create({
   },
   sideStack: {
     flex: 1,
-    gap: 14,
+    gap: 12,
   },
   sideValue: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
     marginTop: 8,
   },
@@ -1778,13 +1875,13 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: 'rgba(13, 21, 38, 0.96)',
     borderColor: 'rgba(218, 226, 253, 0.12)',
-    borderRadius: 26,
+    borderRadius: 22,
     borderTopWidth: 1,
-    bottom: 12,
-    height: 78,
+    bottom: 10,
+    height: 72,
     left: 12,
-    paddingBottom: 10,
-    paddingTop: 10,
+    paddingBottom: 8,
+    paddingTop: 8,
     position: 'absolute',
     right: 12,
   },
@@ -1799,7 +1896,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(78, 222, 163, 0.16)',
   },
   tabItem: {
-    height: 64,
+    height: 58,
   },
   tabLabel: {
     fontSize: 11,
@@ -1886,7 +1983,7 @@ const styles = StyleSheet.create({
   },
   transactionAmountWrap: {
     alignItems: 'flex-end',
-    flex: 0.9,
+    flex: 0.82,
   },
   transactionIcon: {
     alignItems: 'center',
@@ -1926,7 +2023,7 @@ const styles = StyleSheet.create({
   },
   twoColumn: {
     flexDirection: 'row',
-    gap: 14,
+    gap: 12,
   },
   warningText: {
     color: colors.warning,
