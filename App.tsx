@@ -6,9 +6,11 @@ import {
   RouteProp,
 } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
+import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
 import {
   AlertTriangle,
@@ -22,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   CirclePlus,
+  Download,
   Filter,
   Gift,
   GraduationCap,
@@ -30,6 +33,7 @@ import {
   LayoutDashboard,
   LockKeyhole,
   MoreHorizontal,
+  Pencil,
   PiggyBank,
   Plus,
   ReceiptText,
@@ -104,6 +108,7 @@ type Transaction = {
   description: string;
   method: string;
   date: string;
+  edited?: boolean;
 };
 
 type Budget = {
@@ -119,8 +124,10 @@ type AppData = {
   transactions: Transaction[];
   budgets: Budget[];
   alertsRead: boolean;
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'date' | 'edited'>) => void;
+  updateTransaction: (id: string, transaction: Omit<Transaction, 'id' | 'date' | 'edited'>) => void;
   addBudget: (budget: Omit<Budget, 'id'>) => void;
+  updateBudget: (id: string, budget: Omit<Budget, 'id'>) => void;
   updateProfile: (profile: Partial<Profile>) => void;
   toggleAppLock: () => void;
   markAlertsRead: () => void;
@@ -261,6 +268,25 @@ function getAverageDailyExpense(transactions: Transaction[], expenses: number) {
   return expenses / days;
 }
 
+function getBudgetStatus(budget: Budget, spent: number) {
+  const progress = spent / budget.limit;
+  if (spent > budget.limit) {
+    return {
+      isPassed: true,
+      isWarning: true,
+      progress,
+      overBy: spent - budget.limit,
+    };
+  }
+
+  return {
+    isPassed: false,
+    isWarning: progress >= budget.threshold / 100,
+    progress,
+    overBy: 0,
+  };
+}
+
 function getFinancialHealthLabel(income: number, expenses: number, budgets: Budget[]) {
   if (income <= 0 && expenses <= 0 && budgets.length === 0) {
     return 'Financial health: waiting for data';
@@ -307,6 +333,72 @@ function buildTrendPoints(transactions: Transaction[], range: ReportRange) {
       return `${Math.round(x)},${Math.round(y)}`;
     })
     .join(' ');
+}
+
+function escapeCsvValue(value: string | number | undefined) {
+  const stringValue = value === undefined ? '' : String(value);
+  if (/[",\n]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
+function buildReportCsv({
+  profile,
+  range,
+  transactions,
+  income,
+  expenses,
+  balance,
+}: {
+  profile: Profile;
+  range: ReportRange;
+  transactions: Transaction[];
+  income: number;
+  expenses: number;
+  balance: number;
+}) {
+  const rows = [
+    ['Budget Tracker Report'],
+    ['User', profile.fullName || 'User'],
+    ['Range', range],
+    ['Generated At', new Date().toLocaleString()],
+    [],
+    ['Summary'],
+    ['Total Income', income],
+    ['Total Expenses', expenses],
+    ['Balance', balance],
+    [],
+    ['Date', 'Type', 'Category', 'Description', 'Method', 'Amount'],
+    ...transactions.map((transaction) => [
+      new Date(transaction.date).toLocaleString(),
+      transaction.type,
+      transaction.category,
+      transaction.description,
+      transaction.method,
+      transaction.amount,
+    ]),
+  ];
+
+  return rows.map((row) => row.map(escapeCsvValue).join(',')).join('\n');
+}
+
+async function shareReportCsv(csv: string, range: ReportRange) {
+  const fileName = `budget-tracker-${range.toLowerCase()}-report.csv`;
+  const file = new FileSystem.File(FileSystem.Paths.cache, fileName);
+  file.create({ overwrite: true, intermediates: true });
+  file.write(csv);
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(file.uri, {
+      mimeType: 'text/csv',
+      dialogTitle: 'Download Budget Tracker report',
+      UTI: 'public.comma-separated-values-text',
+    });
+  } else {
+    Alert.alert('Report ready', `CSV saved to ${file.uri}`);
+  }
 }
 
 function getCategoryIcon(category: string) {
@@ -414,14 +506,41 @@ function AppDataProvider({ children }: { children: ReactNode }) {
           {
             id: uid('txn'),
             date: new Date().toISOString(),
+            edited: false,
             ...transaction,
           },
           ...current,
         ]);
         setAlertsRead(false);
       },
+      updateTransaction: (id, transactionUpdates) => {
+        setTransactions((current) =>
+          current.map((transaction) =>
+            transaction.id === id && !transaction.edited
+              ? {
+                  ...transaction,
+                  ...transactionUpdates,
+                  edited: true,
+                }
+              : transaction,
+          ),
+        );
+        setAlertsRead(false);
+      },
       addBudget: (budget) => {
         setBudgets((current) => [{ id: uid('budget'), ...budget }, ...current]);
+      },
+      updateBudget: (id, budgetUpdates) => {
+        setBudgets((current) =>
+          current.map((budget) =>
+            budget.id === id
+              ? {
+                  ...budget,
+                  ...budgetUpdates,
+                }
+              : budget,
+          ),
+        );
       },
       updateProfile: (profileUpdates) => {
         setProfile((current) =>
@@ -810,33 +929,146 @@ function ProgressBar({ progress, warning = false }: { progress: number; warning?
 }
 
 function TransactionRow({ transaction }: { transaction: Transaction }) {
-  const { profile } = useAppData();
+  const { profile, updateTransaction } = useAppData();
+  const [editing, setEditing] = useState(false);
+  const [type, setType] = useState<TransactionType>(transaction.type);
+  const [amount, setAmount] = useState(String(transaction.amount));
+  const [category, setCategory] = useState(transaction.category);
+  const [method, setMethod] = useState(transaction.method);
+  const [description, setDescription] = useState(transaction.description);
   const Icon = getCategoryIcon(transaction.category);
   const isIncome = transaction.type === 'income';
+  const canEdit = !transaction.edited;
+  const categories = type === 'income' ? incomeCategories : expenseCategories;
+  const parsedAmount = Number(amount.replace(/,/g, ''));
+  const canSave = parsedAmount > 0 && description.trim().length > 0;
+
+  function openEditor() {
+    if (!canEdit) {
+      hapticTap();
+      return;
+    }
+    setType(transaction.type);
+    setAmount(String(transaction.amount));
+    setCategory(transaction.category);
+    setMethod(transaction.method);
+    setDescription(transaction.description);
+    hapticTap();
+    setEditing(true);
+  }
+
+  function chooseType(nextType: TransactionType) {
+    setType(nextType);
+    setCategory(nextType === 'income' ? 'Salary' : 'Food');
+  }
+
+  function saveEdit() {
+    if (!canSave) {
+      return;
+    }
+    updateTransaction(transaction.id, {
+      type,
+      amount: parsedAmount,
+      category,
+      description: description.trim(),
+      method,
+    });
+    setEditing(false);
+  }
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={hapticTap}
-      style={({ pressed }) => [styles.transactionRow, pressed && styles.pressed]}
-    >
-      <View style={styles.transactionIcon}>
-        <Icon color={isIncome ? colors.primary : colors.muted} size={22} />
-      </View>
-      <View style={styles.transactionMiddle}>
-        <Text style={styles.transactionTitle}>{transaction.description}</Text>
-        <Text style={styles.transactionMeta}>
-          {transaction.method} - {transaction.category}
-        </Text>
-      </View>
-      <View style={styles.transactionAmountWrap}>
-        <Text style={[styles.transactionAmount, isIncome ? styles.goodText : styles.badText]}>
-          {isIncome ? '+' : '-'} {formatMoney(transaction.amount, profile.currency)}
-        </Text>
-        <Text style={styles.transactionTime}>
-          {new Date(transaction.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-      </View>
-    </Pressable>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={canEdit ? 'Edit transaction' : 'Transaction already edited'}
+        onPress={openEditor}
+        style={({ pressed }) => [styles.transactionRow, pressed && canEdit && styles.pressed]}
+      >
+        <View style={styles.transactionIcon}>
+          <Icon color={isIncome ? colors.primary : colors.muted} size={22} />
+        </View>
+        <View style={styles.transactionMiddle}>
+          <Text style={styles.transactionTitle}>{transaction.description}</Text>
+          <Text style={styles.transactionMeta}>
+            {transaction.method} - {transaction.category}
+          </Text>
+          <Text style={transaction.edited ? styles.editedText : styles.editHint}>
+            {transaction.edited ? 'Edited' : 'Tap to edit once'}
+          </Text>
+        </View>
+        <View style={styles.transactionAmountWrap}>
+          <Text style={[styles.transactionAmount, isIncome ? styles.goodText : styles.badText]}>
+            {isIncome ? '+' : '-'} {formatMoney(transaction.amount, profile.currency)}
+          </Text>
+          <View style={styles.rowSmall}>
+            {canEdit ? <Pencil color={colors.muted} size={13} /> : null}
+            <Text style={styles.transactionTime}>
+              {new Date(transaction.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+
+      <Modal transparent visible={editing} animationType="fade" onRequestClose={() => setEditing(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.modalTitle}>Edit transaction</Text>
+              <Pressable accessibilityRole="button" onPress={() => setEditing(false)}>
+                <X color={colors.muted} size={22} />
+              </Pressable>
+            </View>
+            <Text style={styles.mutedText}>Transactions can only be edited once.</Text>
+            <View style={styles.segment}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => chooseType('expense')}
+                style={[styles.segmentItem, type === 'expense' && styles.segmentItemActive]}
+              >
+                <Text style={[styles.segmentText, type === 'expense' && styles.segmentTextActive]}>Expense</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => chooseType('income')}
+                style={[styles.segmentItem, type === 'income' && styles.segmentItemActive]}
+              >
+                <Text style={[styles.segmentText, type === 'income' && styles.segmentTextActive]}>Income</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.inputLabel}>Amount</Text>
+            <TextInput
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={colors.soft}
+              value={amount}
+              onChangeText={setAmount}
+              style={styles.textInput}
+            />
+            <Text style={styles.inputLabel}>Description</Text>
+            <TextInput
+              placeholder={type === 'income' ? 'Income description' : 'Expense description'}
+              placeholderTextColor={colors.soft}
+              value={description}
+              onChangeText={setDescription}
+              style={styles.textInput}
+            />
+            <Text style={styles.inputLabel}>Category</Text>
+            <View style={styles.wrapRow}>
+              {categories.map((item) => (
+                <PillButton key={item} label={item} onPress={() => setCategory(item)} active={category === item} />
+              ))}
+            </View>
+            <Text style={styles.inputLabel}>Payment method</Text>
+            <View style={styles.wrapRow}>
+              {methods.map((item) => (
+                <PillButton key={item} label={item} onPress={() => setMethod(item)} active={method === item} />
+              ))}
+            </View>
+            <PrimaryButton label="Save edit" onPress={saveEdit} disabled={!canSave} />
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -850,12 +1082,21 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
   const dailyAverage = getAverageDailyExpense(transactions, expenses);
   const money = (amount: number) => formatMoney(amount, profile.currency);
 
-  const budgetWarnings = budgets.filter((budget) => {
-    const spent = transactions
-      .filter((transaction) => transaction.type === 'expense' && transaction.category === budget.category)
-      .reduce((total, transaction) => total + transaction.amount, 0);
-    return spent / budget.limit >= budget.threshold / 100;
-  });
+  const budgetWarnings = budgets
+    .map((budget) => {
+      const spent = transactions
+        .filter((transaction) => transaction.type === 'expense' && transaction.category === budget.category)
+        .reduce((total, transaction) => total + transaction.amount, 0);
+      return { budget, spent, status: getBudgetStatus(budget, spent) };
+    })
+    .filter(({ status }) => status.isWarning);
+  const passedBudgetWarning = budgetWarnings.find(({ status }) => status.isPassed);
+  const firstBudgetWarning = passedBudgetWarning ?? budgetWarnings[0];
+  const budgetAlertMessage = firstBudgetWarning
+    ? firstBudgetWarning.status.isPassed
+      ? `${firstBudgetWarning.budget.name} has passed its budget by ${money(firstBudgetWarning.status.overBy)}.`
+      : `${firstBudgetWarning.budget.name} is close to its ${firstBudgetWarning.budget.threshold}% alert threshold.`
+    : 'No active budget warnings right now.';
 
   return (
     <ScreenShell
@@ -880,29 +1121,6 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
       }
     >
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {showAlerts ? (
-          <GlassCard tone={budgetWarnings.length > 0 ? 'warning' : 'accent'}>
-            <View style={styles.rowBetween}>
-              <View style={styles.rowSmall}>
-                {budgetWarnings.length > 0 ? (
-                  <AlertTriangle color={colors.warning} size={20} />
-                ) : (
-                  <CheckCircle color={colors.primary} size={20} />
-                )}
-                <Text style={styles.cardTitle}>{budgetWarnings.length > 0 ? 'Budget alert' : 'All clear'}</Text>
-              </View>
-              <Pressable accessibilityRole="button" onPress={() => setShowAlerts(false)}>
-                <X color={colors.muted} size={20} />
-              </Pressable>
-            </View>
-            <Text style={styles.bodyText}>
-              {budgetWarnings.length > 0
-                ? `${budgetWarnings[0].name} is close to its alert threshold.`
-                : 'No active budget warnings right now.'}
-            </Text>
-          </GlassCard>
-        ) : null}
-
         <GlassCard tone="accent">
           <View style={styles.rowBetween}>
             <Text style={styles.kicker}>Total balance</Text>
@@ -978,17 +1196,21 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
             const spent = transactions
               .filter((transaction) => transaction.type === 'expense' && transaction.category === budget.category)
               .reduce((total, transaction) => total + transaction.amount, 0);
-            const progress = spent / budget.limit;
+            const status = getBudgetStatus(budget, spent);
             return (
-              <GlassCard key={budget.id}>
+              <GlassCard key={budget.id} tone={status.isPassed ? 'warning' : 'default'}>
                 <View style={styles.rowBetween}>
                   <CategoryBadge category={budget.category} />
                   <Text style={styles.amountSmall}>
                     {money(spent)} / {money(budget.limit)}
                   </Text>
                 </View>
-                <ProgressBar progress={progress} warning={progress >= budget.threshold / 100} />
-                <Text style={styles.mutedText}>{Math.round(progress * 100)}% used</Text>
+                <ProgressBar progress={status.progress} warning={status.isWarning} />
+                <Text style={status.isPassed ? styles.warningText : styles.mutedText}>
+                  {status.isPassed
+                    ? `Budget passed by ${money(status.overBy)}`
+                    : `${Math.round(status.progress * 100)}% used`}
+                </Text>
               </GlassCard>
             );
           })
@@ -1017,6 +1239,47 @@ function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
           )}
         </GlassCard>
       </ScrollView>
+      <Modal transparent visible={showAlerts} animationType="fade" onRequestClose={() => setShowAlerts(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.rowSmall}>
+                {budgetWarnings.length > 0 ? (
+                  <AlertTriangle color={colors.warning} size={22} />
+                ) : (
+                  <CheckCircle color={colors.primary} size={22} />
+                )}
+                <Text style={styles.modalTitle}>
+                  {budgetWarnings.length > 0
+                    ? passedBudgetWarning
+                      ? 'Budget passed'
+                      : 'Budget alert'
+                    : 'All clear'}
+                </Text>
+              </View>
+              <Pressable accessibilityRole="button" onPress={() => setShowAlerts(false)}>
+                <X color={colors.muted} size={22} />
+              </Pressable>
+            </View>
+            <Text style={[styles.bodyText, styles.notificationMessage]}>{budgetAlertMessage}</Text>
+            {budgetWarnings.length > 1 ? (
+              <View style={styles.notificationList}>
+                {budgetWarnings.map(({ budget, status }) => (
+                  <View key={budget.id} style={styles.notificationItem}>
+                    <Text style={styles.notificationTitle}>{budget.name}</Text>
+                    <Text style={status.isPassed ? styles.warningText : styles.mutedText}>
+                      {status.isPassed
+                        ? `Passed by ${money(status.overBy)}`
+                        : `Reached ${Math.round(status.progress * 100)}% of limit`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            <PrimaryButton label="Got it" onPress={() => setShowAlerts(false)} />
+          </View>
+        </View>
+      </Modal>
       <ProfileEditor visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </ScreenShell>
   );
@@ -1223,29 +1486,56 @@ function AddScreen({ navigation }: ScreenProps<'Add'>) {
 }
 
 function BudgetsScreen() {
-  const { profile, budgets, transactions, addBudget } = useAppData();
+  const { profile, budgets, transactions, addBudget, updateBudget } = useAppData();
   const { budgetTotal, budgetSpent } = useSummary();
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [category, setCategory] = useState('Food');
   const [amount, setAmount] = useState('');
   const [threshold, setThreshold] = useState(80);
   const parsedAmount = Number(amount.replace(/,/g, ''));
   const money = (value: number) => formatMoney(value, profile.currency);
 
-  function createBudget() {
+  function openNewBudget() {
+    setEditingBudget(null);
+    setAmount('');
+    setThreshold(80);
+    setCategory('Food');
+    setModalVisible(true);
+  }
+
+  function openBudgetEditor(budget: Budget) {
+    setEditingBudget(budget);
+    setCategory(budget.category);
+    setAmount(String(budget.limit));
+    setThreshold(budget.threshold);
+    setModalVisible(true);
+  }
+
+  function closeBudgetModal() {
+    setModalVisible(false);
+    setEditingBudget(null);
+  }
+
+  function saveBudget() {
     if (parsedAmount <= 0) {
       return;
     }
-    addBudget({
+    const budgetDetails = {
       name: `${category} Budget`,
       category,
       limit: parsedAmount,
       threshold,
-    });
+    };
+    if (editingBudget) {
+      updateBudget(editingBudget.id, budgetDetails);
+    } else {
+      addBudget(budgetDetails);
+    }
     setAmount('');
     setThreshold(80);
     setCategory('Food');
-    setModalVisible(false);
+    closeBudgetModal();
   }
 
   return (
@@ -1255,7 +1545,7 @@ function BudgetsScreen() {
       rightAction={
         <IconButton
           label="Create budget"
-          onPress={() => setModalVisible(true)}
+          onPress={openNewBudget}
           icon={<CirclePlus color={colors.primary} size={22} />}
         />
       }
@@ -1280,27 +1570,40 @@ function BudgetsScreen() {
           const spent = transactions
             .filter((transaction) => transaction.type === 'expense' && transaction.category === budget.category)
             .reduce((total, transaction) => total + transaction.amount, 0);
-          const progress = spent / budget.limit;
-          const isWarning = progress >= budget.threshold / 100;
+          const status = getBudgetStatus(budget, spent);
           return (
-            <GlassCard key={budget.id} tone={isWarning ? 'warning' : 'default'}>
+            <GlassCard key={budget.id} tone={status.isWarning ? 'warning' : 'default'}>
               <View style={styles.rowBetween}>
                 <CategoryBadge category={budget.category} />
-                <Text style={[styles.percentText, isWarning && styles.warningText]}>{Math.round(progress * 100)}%</Text>
+                <View style={styles.rowSmall}>
+                  <Text style={[styles.percentText, status.isWarning && styles.warningText]}>
+                    {status.isPassed ? 'Passed' : `${Math.round(status.progress * 100)}%`}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${budget.name}`}
+                    onPress={() => openBudgetEditor(budget)}
+                    style={({ pressed }) => [styles.inlineIconButton, pressed && styles.pressed]}
+                  >
+                    <Pencil color={colors.primary} size={17} />
+                  </Pressable>
+                </View>
               </View>
               <Text style={styles.budgetName}>{budget.name}</Text>
               <Text style={styles.bodyText}>
                 {money(spent)} spent from {money(budget.limit)}
               </Text>
-              <ProgressBar progress={progress} warning={isWarning} />
-              <Text style={styles.mutedText}>Alert at {budget.threshold}%</Text>
+              <ProgressBar progress={status.progress} warning={status.isWarning} />
+              <Text style={status.isPassed ? styles.warningText : styles.mutedText}>
+                {status.isPassed ? `Budget passed by ${money(status.overBy)}` : `Alert at ${budget.threshold}%`}
+              </Text>
             </GlassCard>
           );
         })}
 
         <Pressable
           accessibilityRole="button"
-          onPress={() => setModalVisible(true)}
+          onPress={openNewBudget}
           style={({ pressed }) => [styles.createBudgetCard, pressed && styles.pressed]}
         >
           <CirclePlus color={colors.primary} size={34} />
@@ -1308,18 +1611,22 @@ function BudgetsScreen() {
         </Pressable>
       </ScrollView>
 
-      <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}>
+      <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={closeBudgetModal}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.rowBetween}>
               <View style={styles.titleWithInfo}>
-                <Text style={styles.modalTitle}>New budget</Text>
+                <Text style={styles.modalTitle}>{editingBudget ? 'Edit budget' : 'New budget'}</Text>
                 <InfoButton
-                  title="New budget"
-                  message="Create a budget to track expenses for one category against a limit and alert threshold."
+                  title={editingBudget ? 'Edit budget' : 'New budget'}
+                  message={
+                    editingBudget
+                      ? 'Update the category, limit, or alert threshold for this budget.'
+                      : 'Create a budget to track expenses for one category against a limit and alert threshold.'
+                  }
                 />
               </View>
-              <Pressable accessibilityRole="button" onPress={() => setModalVisible(false)}>
+              <Pressable accessibilityRole="button" onPress={closeBudgetModal}>
                 <X color={colors.muted} size={22} />
               </Pressable>
             </View>
@@ -1344,7 +1651,11 @@ function BudgetsScreen() {
                 <PillButton key={item} label={`${item}%`} onPress={() => setThreshold(item)} active={threshold === item} />
               ))}
             </View>
-            <PrimaryButton label="Create budget" onPress={createBudget} disabled={parsedAmount <= 0} />
+            <PrimaryButton
+              label={editingBudget ? 'Save budget' : 'Create budget'}
+              onPress={saveBudget}
+              disabled={parsedAmount <= 0}
+            />
           </View>
         </View>
       </Modal>
@@ -1355,6 +1666,7 @@ function BudgetsScreen() {
 function ReportsScreen() {
   const { profile, transactions, budgets } = useAppData();
   const [range, setRange] = useState<ReportRange>('Month');
+  const [isExporting, setIsExporting] = useState(false);
   const rangeTransactions = useMemo(() => getTransactionsInRange(transactions, range), [range, transactions]);
   const previousRangeTransactions = useMemo(() => getTransactionsInRange(transactions, range, 1), [range, transactions]);
   const income = sumTransactions(rangeTransactions, 'income');
@@ -1376,6 +1688,25 @@ function ReportsScreen() {
   const healthLabel = getFinancialHealthLabel(income, expenses, budgets);
   const money = (amount: number) => formatMoney(amount, profile.currency);
 
+  async function downloadCsv() {
+    try {
+      setIsExporting(true);
+      const csv = buildReportCsv({
+        profile,
+        range,
+        transactions: rangeTransactions,
+        income,
+        expenses,
+        balance,
+      });
+      await shareReportCsv(csv, range);
+    } catch {
+      Alert.alert('Export failed', 'Budget Tracker could not prepare the CSV report. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   return (
     <ScreenShell title="Reports" subtitle="Simple insights from local records.">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -1390,6 +1721,18 @@ function ReportsScreen() {
               <Text style={[styles.segmentText, range === item && styles.segmentTextActive]}>{item}</Text>
             </Pressable>
           ))}
+        </View>
+
+        <PrimaryButton
+          label={isExporting ? 'Preparing CSV...' : 'Download CSV'}
+          onPress={downloadCsv}
+          disabled={isExporting}
+          icon={<Download color="#06251a" size={19} />}
+        />
+        <View style={styles.reportExportHint}>
+          <Text style={styles.bodyText}>
+            Exports the selected {range.toLowerCase()} report with summary totals and transaction rows.
+          </Text>
         </View>
 
         <View style={styles.twoColumn}>
@@ -1442,7 +1785,9 @@ function ReportsScreen() {
               />
             </Svg>
             <View style={styles.donutCenter}>
-              <Text style={styles.donutAmount}>{money(expenses)}</Text>
+              <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.donutAmount}>
+                {money(expenses)}
+              </Text>
               <Text style={styles.kicker}>Spent</Text>
             </View>
           </View>
@@ -1757,7 +2102,7 @@ function TabIcon({
   focused: boolean;
 }) {
   const iconColor = focused ? colors.primary : '#d7dfeb';
-  const iconSize = route.name === 'Add' ? 30 : 24;
+  const iconSize = route.name === 'Add' ? 26 : 22;
   switch (route.name) {
     case 'Dashboard':
       return <LayoutDashboard color={iconColor} size={iconSize} />;
@@ -1784,6 +2129,7 @@ function MainTabs() {
         tabBarItemStyle: route.name === 'Add' ? styles.addTabItem : styles.tabItem,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: '#d7dfeb',
+        tabBarIconStyle: styles.tabBarIconSlot,
         tabBarLabelStyle: styles.tabLabel,
         tabBarIcon: ({ focused }) => (
           <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive, route.name === 'Add' && styles.addIconWrap]}>
@@ -1823,18 +2169,20 @@ const styles = StyleSheet.create({
   addIconWrap: {
     backgroundColor: colors.primary,
     borderColor: 'rgba(6, 37, 26, 0.35)',
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
-    height: 48,
-    marginTop: -12,
+    height: 40,
     shadowColor: colors.primary,
-    shadowOffset: { height: 8, width: 0 },
-    shadowOpacity: 0.26,
-    shadowRadius: 14,
-    width: 48,
+    shadowOffset: { height: 6, width: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    width: 40,
   },
   addTabItem: {
-    height: 66,
+    height: 74,
+    justifyContent: 'center',
+    paddingBottom: 6,
+    paddingTop: 6,
   },
   amountInput: {
     color: colors.text,
@@ -1999,14 +2347,16 @@ const styles = StyleSheet.create({
   },
   donutAmount: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '900',
     textAlign: 'center',
+    width: 104,
   },
   donutCenter: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'absolute',
+    width: 112,
   },
   donutWrap: {
     alignItems: 'center',
@@ -2080,6 +2430,17 @@ const styles = StyleSheet.create({
   dropdownWrap: {
     width: '100%',
   },
+  editedText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  editHint: {
+    color: colors.soft,
+    fontSize: 12,
+    marginTop: 4,
+  },
   emptyState: {
     alignItems: 'center',
     gap: 8,
@@ -2089,6 +2450,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 18,
     fontWeight: '800',
+  },
+  editHint: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  editedText: {
+    color: colors.soft,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 4,
   },
   goodText: {
     color: colors.primary,
@@ -2119,6 +2492,16 @@ const styles = StyleSheet.create({
   },
   iconButtonActive: {
     borderColor: colors.primary,
+  },
+  inlineIconButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(78, 222, 163, 0.1)',
+    borderColor: 'rgba(78, 222, 163, 0.34)',
+    borderRadius: 15,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
   },
   infoButton: {
     alignItems: 'center',
@@ -2204,6 +2587,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 8,
   },
+  notificationItem: {
+    backgroundColor: 'rgba(218, 226, 253, 0.06)',
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+  },
+  notificationList: {
+    gap: 10,
+    marginBottom: 16,
+    marginTop: 14,
+  },
+  notificationMessage: {
+    marginTop: 14,
+  },
+  notificationTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
   percentText: {
     color: colors.primary,
     fontSize: 18,
@@ -2214,11 +2617,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(218, 226, 253, 0.08)',
     borderColor: colors.border,
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flexDirection: 'row',
     justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: 16,
+    marginBottom: 8,
+    minHeight: 46,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   pillActive: {
     backgroundColor: 'rgba(78, 222, 163, 0.16)',
@@ -2291,6 +2696,10 @@ const styles = StyleSheet.create({
   progressWarning: {
     backgroundColor: colors.warning,
   },
+  reportExportHint: {
+    marginBottom: 14,
+    marginTop: 8,
+  },
   rowBetween: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -2346,16 +2755,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 16,
-    padding: 5,
+    gap: 8,
+    marginBottom: 20,
+    padding: 7,
   },
   segmentItem: {
     alignItems: 'center',
     borderRadius: 14,
     flex: 1,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
   },
   segmentItemActive: {
     backgroundColor: 'rgba(78, 222, 163, 0.2)',
@@ -2396,30 +2807,39 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(218, 226, 253, 0.12)',
     borderRadius: 22,
     borderTopWidth: 1,
-    bottom: 10,
-    height: 72,
+    bottom: 12,
+    height: 84,
     left: 12,
-    paddingBottom: 8,
-    paddingTop: 8,
+    paddingBottom: 12,
+    paddingTop: 10,
     position: 'absolute',
     right: 12,
   },
+  tabBarIconSlot: {
+    marginBottom: 4,
+    marginTop: 2,
+  },
   tabIconWrap: {
     alignItems: 'center',
-    borderRadius: 22,
-    height: 42,
+    borderRadius: 18,
+    height: 36,
     justifyContent: 'center',
-    width: 54,
+    width: 48,
   },
   tabIconWrapActive: {
     backgroundColor: 'rgba(78, 222, 163, 0.16)',
   },
   tabItem: {
-    height: 58,
+    height: 74,
+    justifyContent: 'center',
+    paddingBottom: 6,
+    paddingTop: 6,
   },
   tabLabel: {
     fontSize: 11,
     fontWeight: '800',
+    lineHeight: 13,
+    marginTop: 2,
   },
   textInput: {
     backgroundColor: 'rgba(9, 18, 35, 0.46)',
@@ -2554,8 +2974,11 @@ const styles = StyleSheet.create({
     color: colors.warning,
   },
   wrapRow: {
+    columnGap: 10,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    marginBottom: 10,
+    marginTop: 14,
+    rowGap: 10,
   },
 });
