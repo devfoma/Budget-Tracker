@@ -1310,8 +1310,8 @@ function BudgetsScreen() {
 
       <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <View style={styles.rowBetween}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
               <View style={styles.titleWithInfo}>
                 <Text style={styles.modalTitle}>New budget</Text>
                 <InfoButton
