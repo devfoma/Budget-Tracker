@@ -33,7 +33,6 @@ import {
   RotateCcw,
   Search,
   ShoppingBag,
-  Sparkles,
   Tags,
   TrendingUp,
   User,
@@ -409,7 +408,7 @@ function AppDataProvider({ children }: { children: ReactNode }) {
     return (
       <GradientShell>
         <View style={styles.loadingWrap}>
-          <Sparkles color={colors.primary} size={34} />
+          <HeartPulse color={colors.primary} size={34} />
           <Text style={styles.loadingTitle}>Budget Tracker</Text>
           <Text style={styles.loadingText}>Preparing your local workspace</Text>
         </View>
@@ -1254,7 +1253,7 @@ function ReportsScreen() {
 
         <GlassCard tone="accent">
           <View style={styles.rowSmall}>
-            <Sparkles color={colors.primary} size={26} />
+            <HeartPulse color={colors.primary} size={26} />
             <Text style={styles.cardTitle}>{healthLabel}</Text>
           </View>
           <Text style={styles.bodyText}>
@@ -1323,7 +1322,7 @@ function AppTour() {
   return (
     <View style={styles.tourOverlay}>
       <View style={styles.tourSpotlight}>
-        <Sparkles color={colors.primary} size={26} />
+        <HeartPulse color={colors.primary} size={26} />
         <Text style={styles.tourSpotlightText}>{step.route}</Text>
       </View>
       <View style={styles.tourCard}>
