@@ -458,6 +458,13 @@ export function TransactionRow({ transaction }: { transaction: Transaction }) {
               {new Date(transaction.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
+          <Text style={styles.transactionDate}>
+            {new Date(transaction.date).toLocaleDateString([], {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </Text>
         </View>
       </Pressable>
 

@@ -856,6 +856,13 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
+  transactionDate: {
+    color: colors.soft,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 3,
+    textAlign: 'right',
+  },
   transactionTitle: {
     color: colors.text,
     fontSize: 16,
