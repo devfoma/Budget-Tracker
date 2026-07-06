@@ -6,6 +6,16 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#F9BD22",
+          "defaultChannel": "budget-alerts"
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
